@@ -90,6 +90,6 @@ class KakurasuSolver(BaseSolver):
                 board[i][j] = 0
             return False
 
-        # solve_kakurasu() ## supusingly not needed, if needed uncomment this
+        # solve_kakurasu() ## surprisingly not needed, if needed uncomment this
         print(board)
         return board
