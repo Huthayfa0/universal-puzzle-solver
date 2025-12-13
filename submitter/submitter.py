@@ -84,7 +84,7 @@ def smart_write(driver, element, text):
         actions.send_keys(char).perform()
 
 def smart_write_number(driver, element, number):
-    smart_write(driver, element, number if number <= 9 else str(number - 10 + 'a'))
+    smart_write(driver, element, number if number <= 9 else chr(number - 10 + ord('a')))
 
 class SubmitterBase:
     def __init__(self, driver, info={},offset=0):

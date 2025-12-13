@@ -28,7 +28,7 @@ class TaskParserBase:
         raise NotImplementedError("This method should be overridden by subclasses.")
 
 class TableTaskParser(TaskParserBase):
-    def parse(self, raw_task, height=None):
+    def parse(self, raw_task):
         # Example parsing logic for table-based tasks
         task_data = {}
         table = []
@@ -48,8 +48,8 @@ class TableTaskParser(TaskParserBase):
             else:
                 table.extend([0] * (ord(char) - ord('a') + 1))
             char_idx += 1
-        if height is not None:
-            task_data["height"] = height
+        if self.info.get("height") is not None:
+            task_data["height"] = self.info.get("height")
         else:
             task_data["height"] = int(sqrt(len(table)))
         task_data["width"] = len(table) // task_data["height"]
