@@ -1,5 +1,4 @@
 from .solver import BaseSolver
-import random 
 
 class SudokuSolver(BaseSolver):
     def solve(self):

@@ -64,7 +64,11 @@ class BorderTaskParser(TaskParserBase):
     def parse(self, raw_task):
         # Example parsing logic for table-based tasks
         task_data = {}
-        border = list(map(lambda x: int(x) if x.isdigit() else x, raw_task.split('/')))
+        if '.' in raw_task:
+            border = list(map(lambda x: x if x.isdigit() else x, raw_task.split('/')))
+            border = [list(map(lambda y: int(y) if y.isdigit() else y, x.split('.'))) for x in border]
+        else:
+            border = list(map(lambda x: int(x) if x.isdigit() else x, raw_task.split('/')))
         
         if self.info.get("height") is not None:
             task_data["height"] = self.info.get("height")

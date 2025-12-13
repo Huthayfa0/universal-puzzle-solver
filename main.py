@@ -8,14 +8,18 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 test_mode = False
+ignore_empty = False
 def main():
     parser = argparse.ArgumentParser(description="Solve a puzzle.")
     parser.add_argument("--quest_mode", action="store_true", help="Enable quest mode.")
     parser.add_argument("--test_mode", action="store_true", help="Enable test mode.")
+    parser.add_argument("--ignore_empty", action="store_true", help="Ignore x values.")
     
     args = parser.parse_args()
     global test_mode
     test_mode = args.test_mode
+    global ignore_empty
+    ignore_empty = args.ignore_empty
     driver = get_driver()
     if args.quest_mode and not test_mode:
         while True:
@@ -90,10 +94,15 @@ def run_solver(driver):
     # Step 2: Parse the task
     if info["puzzle"] in ["sudoku"]:
         parser = TableTaskParser(info)
-    elif info["puzzle"] in ["kakurasu"]:
+    elif info["puzzle"] in ["kakurasu", "nonograms"]:
         parser = BorderTaskParser(info)
     else:
         raise NotImplementedError(f"Parser for puzzle type '{info['puzzle']}' is not implemented.")
+    
+    if info["puzzle"] == "nonograms":
+        if info["type"] == "daily":
+            info["height"] = 30
+        
     parsed_task = parser.parse(info["task"])
     print("Parsed task data:", parsed_task)
     info.update(parsed_task)
@@ -104,12 +113,13 @@ def run_solver(driver):
         else:
             info["subtable_height"] = 3
         info["subtable_width"] = info["height"] // info["subtable_height"]
-        
     # Step 3: Solve puzzle
     if info["puzzle"] == "sudoku":
         solver = sudoku_solver.SudokuSolver(info)
     elif info["puzzle"] == "kakurasu":
         solver = kakurasu_solver.KakurasuSolver(info)
+    elif info["puzzle"] == "nonograms":
+        solver = nonograms_solver.NonogramsSolver(info)
     else:
         raise NotImplementedError(f"Solver for puzzle type '{info['puzzle']}' is not implemented.")
     #timing start
@@ -123,11 +133,20 @@ def run_solver(driver):
         summarize_task(info, time_diff)
     
     # # Step 4: Submit like human
-    if info["puzzle"] in ["sudoku", "kakurasu"]:
-        submitter = TableSubmitter(driver, info)
+    offset = 0
+    if info["puzzle"] == "nonograms":
+        offset = sum(map(lambda v:len(v), info["horizontal_borders"])) + sum(map(lambda v:len(v), info["vertical_borders"]))
+    if info["puzzle"] in ["sudoku", "kakurasu","nonograms"]:
+        submitter = TableSubmitter(driver, info,offset=offset)
     else:
         raise NotImplementedError(f"Submitter for puzzle type '{info['puzzle']}' is not implemented.")
 
+    if ignore_empty:
+        if info["puzzle"] in ["nonograms","kakurasu"]:
+            for i in range(info["height"]):
+                for j in range(info["width"]):
+                    if info["solution"][i][j] == 2:
+                        info["solution"][i][j] = 0
     submitter.submit(info["solution"])
 
 if __name__ == "__main__":
