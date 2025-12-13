@@ -58,3 +58,19 @@ class TableTaskParser(TaskParserBase):
             for i in range(0, len(table), int(task_data["width"]))
         ]
         return task_data
+
+
+class BorderTaskParser(TaskParserBase):
+    def parse(self, raw_task):
+        # Example parsing logic for table-based tasks
+        task_data = {}
+        border = list(map(lambda x: int(x) if x.isdigit() else x, raw_task.split('/')))
+        
+        if self.info.get("height") is not None:
+            task_data["height"] = self.info.get("height")
+        else:
+            task_data["height"] = len(border) // 2
+        task_data["width"] = len(border) - task_data["height"]
+        task_data["vertical_borders"] = border[:task_data["width"]] # up or down values
+        task_data["horizontal_borders"] = border[task_data["width"]:] # left or right values
+        return task_data

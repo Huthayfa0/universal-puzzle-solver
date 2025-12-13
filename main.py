@@ -1,6 +1,6 @@
 from controller.chrome_controller import get_driver
 from parser.parser import *
-from solver import sudoku_solver
+from solver import *
 from submitter.submitter import *
 from solver import *
 import argparse, time, json
@@ -90,6 +90,8 @@ def run_solver(driver):
     # Step 2: Parse the task
     if info["puzzle"] in ["sudoku"]:
         parser = TableTaskParser(info)
+    elif info["puzzle"] in ["kakurasu"]:
+        parser = BorderTaskParser(info)
     else:
         raise NotImplementedError(f"Parser for puzzle type '{info['puzzle']}' is not implemented.")
     parsed_task = parser.parse(info["task"])
@@ -106,6 +108,8 @@ def run_solver(driver):
     # Step 3: Solve puzzle
     if info["puzzle"] == "sudoku":
         solver = sudoku_solver.SudokuSolver(info)
+    elif info["puzzle"] == "kakurasu":
+        solver = kakurasu_solver.KakurasuSolver(info)
     else:
         raise NotImplementedError(f"Solver for puzzle type '{info['puzzle']}' is not implemented.")
     #timing start
@@ -119,7 +123,7 @@ def run_solver(driver):
         summarize_task(info, time_diff)
     
     # # Step 4: Submit like human
-    if info["puzzle"] == "sudoku":
+    if info["puzzle"] in ["sudoku", "kakurasu"]:
         submitter = TableSubmitter(driver, info)
     else:
         raise NotImplementedError(f"Submitter for puzzle type '{info['puzzle']}' is not implemented.")
