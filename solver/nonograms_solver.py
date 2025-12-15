@@ -444,6 +444,50 @@ class NonogramsSolver(BaseSolver):
         self.clues_order = [(i, 'row') for i in range(self.height)] + [(j, 'col') for j in range(self.width)]
         self.clues_order = sorted(self.clues_order, key=lambda x: self.possible_values_expected_heuristic(self.row_info[x[0]],self.width)
                                   if x[1]=='row' else self.possible_values_expected_heuristic(self.col_info[x[0]],self.height))
+        tmp_arr =[0]*self.height
+        i=0
+        tmp_que = []
+        while i < self.height+ self.width- len(tmp_que):
+            if self.clues_order[i][1]=='row':
+                x=self.clues_order[i][0]
+                if x==0 or x==self.height-1 or tmp_arr[x-1]==1 or tmp_arr[x+1]==1:
+                    tmp_arr[x]=1
+                    i+=1
+                    continue
+                if tmp_que and (tmp_arr[tmp_que[0][0]-1]==1 or tmp_arr[tmp_que[0][0]+1]==1):
+                    self.clues_order.insert(i,tmp_que.pop(0))
+                    continue
+                if tmp_que and (tmp_arr[tmp_que[-1][0]-1]==1 or tmp_arr[tmp_que[-1][0]+1]==1):
+                    self.clues_order.insert(i,tmp_que.pop(-1))
+                    continue
+                tmp_que.append(self.clues_order.pop(i))
+                tmp_que=list(sorted(tmp_que))
+            else:
+                i+=1
+        self.clues_order.extend(tmp_que)
+        tmp_arr =[0]*self.width
+        i=0
+        tmp_que = []
+        while i < self.height+ self.width- len(tmp_que):
+            if self.clues_order[i][1]=='col':
+                x=self.clues_order[i][0]
+                if x==0 or x==self.width-1 or tmp_arr[x-1]==1 or tmp_arr[x+1]==1:
+                    tmp_arr[x]=1
+                    i+=1
+                    continue
+                if tmp_que and (tmp_arr[tmp_que[0][0]-1]==1 or tmp_arr[tmp_que[0][0]+1]==1):
+                    self.clues_order.insert(i,tmp_que.pop(0))
+                    continue
+                if tmp_que and (tmp_arr[tmp_que[-1][0]-1]==1 or tmp_arr[tmp_que[-1][0]+1]==1):
+                    self.clues_order.insert(i,tmp_que.pop(-1))
+                    continue
+                tmp_que.append(self.clues_order.pop(i))
+                tmp_que=list(sorted(tmp_que))
+            else:
+                i+=1
+        
+        self.clues_order.extend(tmp_que)
+                #found a value col check if the value is 0 or self.height -1 or if tmp_arr[val-1]==1 or tmp_arr[val+1]==1 then accept, else move until any value of those becomes 1
         self.solve_puzzle()
         print(self.board)
         return self.board
