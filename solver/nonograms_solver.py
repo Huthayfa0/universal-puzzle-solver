@@ -198,28 +198,31 @@ class NonogramsSolver(BaseSolver):
         block_len = val[0]
 
         # Placing block
-        if (
-            arr[index] == 1 and
-            all(arr[index + i] != 2 for i in range(block_len)) and
-            (index + block_len == len(arr) or arr[index + block_len] != 1)
-        ):
-            backup = arr[index:index + block_len + (index + block_len < len(arr))].copy()
-            for i in range(block_len):
-                arr[index + i] = 1
-            if index + block_len < len(arr):
-                arr[index + block_len] = 2
-
-            res = self.first_possible_value_line(
-                arr,
-                val[1:],
-                index + block_len + (index + block_len < len(arr))
-            )
-            if res is not None:
-                arr[index + block_len + (index + block_len < len(arr)):] = res
-                return arr[index:]
-
-            # rollback
-            arr[index:index + block_len + (index + block_len < len(arr))] = backup
+        if arr[index] == 1:
+            if (
+                arr[index] == 1 and
+                all(arr[index + i] != 2 for i in range(block_len)) and
+                (index + block_len == len(arr) or arr[index + block_len] != 1)
+            ):
+                backup = arr[index:index + block_len + (index + block_len < len(arr))].copy()
+                for i in range(block_len):
+                    arr[index + i] = 1
+                if index + block_len < len(arr):
+                    arr[index + block_len] = 2
+    
+                res = self.first_possible_value_line(
+                    arr,
+                    val[1:],
+                    index + block_len + (index + block_len < len(arr))
+                )
+                if res is not None:
+                    arr[index + block_len + (index + block_len < len(arr)):] = res
+                    return arr[index:]
+    
+                # rollback
+                arr[index:index + block_len + (index + block_len < len(arr))] = backup
+                if res is None:
+                    return None
         cache_key=(0)
         if len(arr)-index<=16:
             cache_key =(len(arr)-index,self.decode(arr[index:]),*val)
