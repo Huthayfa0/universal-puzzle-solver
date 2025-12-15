@@ -3,6 +3,7 @@ from math import comb
 from copy import copy, deepcopy
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from threading import Event
+from itertools import chain
 
 class NonogramsSolver(BaseSolver):
     def __init__(self, info):
@@ -25,21 +26,14 @@ class NonogramsSolver(BaseSolver):
 
     def possible_values_line_with_heur(self, arr,val,index=0,min_heuristic=0,max_heuristic=-1):
         results = []
-
         remaining_len = len(arr) - index
         upper_bound = self.possible_values_expected_heuristic(val, remaining_len)
-
-        if upper_bound == 0:
+        if upper_bound == 0 or upper_bound < min_heuristic:
             return []
-
-        if upper_bound < min_heuristic:
-            return []
-
         if index >= len(arr):
             if not val:
                 results.append(arr.copy())
             return results
-
         if not val:
             if any(x == 1 for x in arr[index:]):
                 return []
@@ -81,11 +75,9 @@ class NonogramsSolver(BaseSolver):
                 block = val.pop(0)
                 results.extend(
                     self.possible_values_line_with_heur(
-                        arr,
-                        val,
+                        arr, val,
                         index + block + (index + block < len(arr)),
-                        min_heuristic,
-                        max_heuristic
+                        min_heuristic, max_heuristic
                     )
                 )
                 
@@ -105,11 +97,9 @@ class NonogramsSolver(BaseSolver):
         arr[index] = 2
         results.extend(
             self.possible_values_line_with_heur(
-                arr,
-                val,
+                arr, val,
                 index + 1,
-                min_heuristic,
-                max_heuristic
+                min_heuristic, max_heuristic
             )
         )
         arr[index] = 0
@@ -119,46 +109,6 @@ class NonogramsSolver(BaseSolver):
 
         return results
 
-
-    def possible_values_line(self, arr,val,index=0,order=0):
-        results = []
-        if index >= len(arr):
-            if val == []:
-                results.append(arr.copy())
-            return results
-        if val == []:
-            if any(x == 1 for x in arr[index:]):
-                return []
-            else:
-                if arr[index]==2:
-                    return self.possible_values_line(arr, val, index + 1)
-                arr[index] = 2
-                results.extend(self.possible_values_line(arr, val, index + 1))
-                arr[index] = 0
-                return results
-        if index + sum(val) + len(val) - 1 > len(arr):
-            return []
-        if arr[index]==2:
-            return self.possible_values_line(arr, val, index + 1)
-        if all(x != 2 for x in arr[index:index + val[0]]) and (index + val[0] == len(arr) or arr[index + val[0]] != 1):
-            tmp_arr = arr[index:index + val[0] + (index + val[0] != len(arr))].copy()
-            for i in range(val[0]):
-                arr[index + i] = 1
-            if index + val[0] != len(arr):
-                arr[index + val[0]] = 2
-            tmp=val.pop(0)
-            results.extend(self.possible_values_line(arr, val, index + tmp + (index + tmp < len(arr))))
-            val.insert(0,tmp)
-            arr[index:index + val[0] + (index + val[0] != len(arr))] = tmp_arr
-        if arr[index]==1:
-            return results
-        if len(results)>order: #this is added for it to end early
-            return results[:order+1]
-        arr[index] = 2
-        results.extend(self.possible_values_line(arr, val, index + 1,order-len(results)))
-        arr[index] = 0
-        return results[:order+1]
-    
     def decode(self,arr):
         v=1
         s=0
@@ -223,11 +173,12 @@ class NonogramsSolver(BaseSolver):
                 arr[index:index + block_len + (index + block_len < len(arr))] = backup
                 if res is None:
                     return None
+            else:
+                return None   
         cache_key=(0)
-        if len(arr)-index<=16:
-            cache_key =(len(arr)-index,self.decode(arr[index:]),*val)
+        cache_key =(len(arr)-index,self.decode(arr[index:]),*val)
 
-        if len(arr)-index<=16 and cache_key in self.first_possible_value_line_cache:
+        if cache_key in self.first_possible_value_line_cache:
             if self.first_possible_value_line_cache[cache_key] is None:
                 return None
             arr[index:]=self.first_possible_value_line_cache[cache_key].copy()
@@ -279,28 +230,19 @@ class NonogramsSolver(BaseSolver):
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             f_left = executor.submit(worker, arr.copy(), val.copy())
-            f_right = executor.submit(
-                worker,
-                list(reversed(arr)),
-                list(reversed(val))
-            )
-
+            f_right = executor.submit( worker, list(reversed(arr)),  list(reversed(val)) )
             futures = {f_left, f_right}
             results = {}
-
             while futures:
                 done, futures = wait(futures, return_when=FIRST_COMPLETED)
-
                 for f in done:
                     res = f.result()
-
                     # ❌ Fail fast
                     if res is None:
                         stop_event.set()
                         for pending in futures:
                             pending.cancel()
                         return None
-
                     results[f] = res
 
             # ✅ Both succeeded
@@ -333,7 +275,18 @@ class NonogramsSolver(BaseSolver):
                 if clue_p_r_cnt==val[clue_p_r]:
                     clue_p_r+=1
                     clue_p_r_cnt=0
-            
+        for i in range(len(arr)):
+            if common[i]!=0:
+                continue
+            common[i]=1
+            if self.first_possible_value_line(common.copy(),val) is None:
+                common[i]=2
+                continue
+            common[i]=2
+            if self.first_possible_value_line(common.copy(),val) is None:
+                common[i]=1
+                continue
+            common[i]=0
         return common   
         
 
@@ -413,8 +366,11 @@ class NonogramsSolver(BaseSolver):
                 possible_vals_db[clue_idx]=[]
                 board_copy[clue_idx]=[]
                 clue_idx-=1
+                while not board_copy[clue_idx]:
+                    clue_idx-=1
+                    
                 self.board=board_copy[clue_idx]
-                print("Back tracking clue:", cell_idx)
+                print("Back tracking clue:", cell_idx, "to clue:",clue_idx)
                 continue
             if all(x!=0 for x in line):
                 clue_idx+=1
@@ -444,52 +400,24 @@ class NonogramsSolver(BaseSolver):
                 self.board=board_copy[clue_idx]
         return self.is_valid()
     def solve(self):
-        self.clues_order = [(i, 'row') for i in range(self.height)] + [(j, 'col') for j in range(self.width)]
-        self.clues_order = sorted(self.clues_order, key=lambda x: self.possible_values_expected_heuristic(self.row_info[x[0]],self.width)
-                                  if x[1]=='row' else self.possible_values_expected_heuristic(self.col_info[x[0]],self.height))
-        tmp_arr =[0]*self.height
-        i=0
-        tmp_que = []
-        while i < self.height+ self.width- len(tmp_que):
-            if self.clues_order[i][1]=='row':
-                x=self.clues_order[i][0]
-                if x==0 or x==self.height-1 or tmp_arr[x-1]==1 or tmp_arr[x+1]==1:
-                    tmp_arr[x]=1
-                    i+=1
-                    continue
-                if tmp_que and (tmp_arr[tmp_que[0][0]-1]==1 or tmp_arr[tmp_que[0][0]+1]==1):
-                    self.clues_order.insert(i,tmp_que.pop(0))
-                    continue
-                if tmp_que and (tmp_arr[tmp_que[-1][0]-1]==1 or tmp_arr[tmp_que[-1][0]+1]==1):
-                    self.clues_order.insert(i,tmp_que.pop(-1))
-                    continue
-                tmp_que.append(self.clues_order.pop(i))
-                tmp_que=list(sorted(tmp_que))
-            else:
-                i+=1
-        self.clues_order.extend(tmp_que)
-        tmp_arr =[0]*self.width
-        i=0
-        tmp_que = []
-        while i < self.height+ self.width- len(tmp_que):
-            if self.clues_order[i][1]=='col':
-                x=self.clues_order[i][0]
-                if x==0 or x==self.width-1 or tmp_arr[x-1]==1 or tmp_arr[x+1]==1:
-                    tmp_arr[x]=1
-                    i+=1
-                    continue
-                if tmp_que and (tmp_arr[tmp_que[0][0]-1]==1 or tmp_arr[tmp_que[0][0]+1]==1):
-                    self.clues_order.insert(i,tmp_que.pop(0))
-                    continue
-                if tmp_que and (tmp_arr[tmp_que[-1][0]-1]==1 or tmp_arr[tmp_que[-1][0]+1]==1):
-                    self.clues_order.insert(i,tmp_que.pop(-1))
-                    continue
-                tmp_que.append(self.clues_order.pop(i))
-                tmp_que=list(sorted(tmp_que))
-            else:
-                i+=1
+        self.clues_order = []
+        rL, rR = 0, self.height
+        cL, cR = 0, self.width
+        while rL < rR or cL < cR:
+            for i in range(rL, min(rL+3, rR)):
+                self.clues_order.append((i, 'row'))
+            rL += 3
+            for i in range(rR-1, max(rR-4, rL-1), -1):
+                self.clues_order.append((i, 'row'))
+            rR -= 3
+            for j in range(cL, min(cL+3, cR)):
+                self.clues_order.append((j, 'col'))
+            cL += 3
+            for j in range(cR-1, max(cR-4, cL-1), -1):
+                self.clues_order.append((j, 'col'))
+            cR -= 3
         
-        self.clues_order.extend(tmp_que)
+        # self.clues_order.extend(tmp_que)
                 #found a value col check if the value is 0 or self.height -1 or if tmp_arr[val-1]==1 or tmp_arr[val+1]==1 then accept, else move until any value of those becomes 1
         self.solve_puzzle()
         print(self.board)
