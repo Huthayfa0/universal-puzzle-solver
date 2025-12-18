@@ -87,7 +87,9 @@ def run_solver(driver):
         info["puzzle_type"] = ""
 
     if info["puzzle"] in ["sudoku"]:
-        info["subtable_type"] = "regular"
+        info["subtable_type"] = "regular" #squares
+    elif info["puzzle"] in ["star-battle"]:
+        info["subtable_type"] = "irregular" #squares
     else:
         info["subtable_type"] = "no_tables"
 
@@ -96,6 +98,8 @@ def run_solver(driver):
         parser = TableTaskParser(info)
     elif info["puzzle"] in ["kakurasu", "nonograms"]:
         parser = BorderTaskParser(info)
+    elif info["puzzle"] in ["star-battle"]:
+        parser = BoxesTaskParser(info)
     else:
         raise NotImplementedError(f"Parser for puzzle type '{info['puzzle']}' is not implemented.")
     
@@ -113,6 +117,11 @@ def run_solver(driver):
         else:
             info["subtable_height"] = 3
         info["subtable_width"] = info["height"] // info["subtable_height"]
+    
+    if info["puzzle"] in ["star-battle"]:
+        info["items_per_box"]=1 + (info["height"] >=10) + (info["height"] >=14) + (info["height"] >=17) +\
+                                        (info["height"] >=21) + (info["height"] >=25)
+    
     # Step 3: Solve puzzle
     if info["puzzle"] == "sudoku":
         solver = sudoku_solver.SudokuSolver(info)
@@ -120,6 +129,8 @@ def run_solver(driver):
         solver = kakurasu_solver.KakurasuSolver(info)
     elif info["puzzle"] == "nonograms":
         solver = nonograms_solver.NonogramsSolver(info)
+    elif info["puzzle"] == "star-battle":
+        solver = star_battle_solver.StarBattleSolver(info)
     else:
         raise NotImplementedError(f"Solver for puzzle type '{info['puzzle']}' is not implemented.")
     #timing start
@@ -136,7 +147,9 @@ def run_solver(driver):
     offset = 0
     if info["puzzle"] == "nonograms":
         offset = sum(map(lambda v:len(v), info["horizontal_borders"])) + sum(map(lambda v:len(v), info["vertical_borders"]))
-    if info["puzzle"] in ["sudoku", "kakurasu","nonograms"]:
+
+        
+    if info["puzzle"] in ["sudoku", "kakurasu","nonograms","star-battle"]:
         submitter = TableSubmitter(driver, info,offset=offset)
     else:
         raise NotImplementedError(f"Submitter for puzzle type '{info['puzzle']}' is not implemented.")
@@ -146,6 +159,11 @@ def run_solver(driver):
             for i in range(info["height"]):
                 for j in range(info["width"]):
                     if info["solution"][i][j] == 2:
+                        info["solution"][i][j] = 0
+        if info["puzzle"] in ["star-battle"]:
+            for i in range(info["height"]):
+                for j in range(info["width"]):
+                    if info["solution"][i][j] == 1:
                         info["solution"][i][j] = 0
     submitter.submit(info["solution"])
 

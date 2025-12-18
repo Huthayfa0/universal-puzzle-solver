@@ -78,6 +78,8 @@ class KakurasuSolver(BaseSolver):
         if cell_idx >= self.height * self.width:
             return self.is_valid()
         i, j = divmod(cell_idx, self.width)
+        if self.board[i][j]==0:
+            return self.solve_puzzle(cell_idx + 1)
         for value in [1, 2]:
             self.board[i][j] = value
             if self.solve_puzzle(cell_idx + 1):

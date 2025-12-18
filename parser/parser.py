@@ -59,6 +59,38 @@ class TableTaskParser(TaskParserBase):
         ]
         return task_data
 
+class BoxesTaskParser(TaskParserBase):
+    def parse(self, raw_task):
+        # Example parsing logic for table-based tasks
+        task_data = {}
+        table = list(map(lambda x:int(x)-1 ,raw_task.split(",")))
+        if self.info.get("height") is not None:
+            task_data["height"] = self.info.get("height")
+        else:
+            task_data["height"] = int(sqrt(len(table)))
+        task_data["width"] = len(table) // task_data["height"]
+        task_data["boxes_table"] = [
+            table[i:i + int(task_data["width"])]
+            for i in range(0, len(table), int(task_data["width"]))
+        ]
+        boxes=[]
+        boxes_borders=[]
+        for i in range(task_data["height"]):
+            for j in range(task_data["width"]):
+                v = task_data["boxes_table"][i][j]
+                while v>=len(boxes):
+                    boxes.append([])
+                    boxes_borders.append({})
+                boxes[v].append((i,j))
+                for dir in [(1,0),(-1,0),(0,1),(0,-1)]:
+                    if 0<=i+dir[0] <task_data["height"] and 0<=j+dir[1] <task_data["width"]:
+                        v2= task_data["boxes_table"][i+dir[0]][j+dir[1]]
+                        if v!= v2:
+                            boxes_borders[v].setdefault(v2,[])
+                            boxes_borders[v][v2].append((i,j,dir))
+        task_data["boxes"]=boxes
+        task_data["boxes_borders"]=boxes_borders
+        return task_data
 
 class BorderTaskParser(TaskParserBase):
     def parse(self, raw_task):
