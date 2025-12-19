@@ -81,7 +81,7 @@ def run_solver(driver):
     info = extract_task(driver)
 
     print("Detected puzzle:", info)
-    if info["puzzle"] in ["sudoku"]:
+    if info["puzzle"] in ["sudoku", "renzoku"]:
         info["puzzle_type"] = "numeric"
     else:
         info["puzzle_type"] = ""
@@ -100,6 +100,8 @@ def run_solver(driver):
         parser = BorderTaskParser(info)
     elif info["puzzle"] in ["star-battle"]:
         parser = BoxesTaskParser(info)
+    elif info["puzzle"] in ["renzoku"]:
+        parser = CellTableTaskParser(info)
     else:
         raise NotImplementedError(f"Parser for puzzle type '{info['puzzle']}' is not implemented.")
     
@@ -123,14 +125,15 @@ def run_solver(driver):
                                         (info["height"] >=21) + (info["height"] >=25)
     
     # Step 3: Solve puzzle
-    if info["puzzle"] == "sudoku":
-        solver = sudoku_solver.SudokuSolver(info)
-    elif info["puzzle"] == "kakurasu":
-        solver = kakurasu_solver.KakurasuSolver(info)
-    elif info["puzzle"] == "nonograms":
-        solver = nonograms_solver.NonogramsSolver(info)
-    elif info["puzzle"] == "star-battle":
-        solver = star_battle_solver.StarBattleSolver(info)
+    solvers = {
+        "sudoku":sudoku_solver.SudokuSolver,
+        "kakurasu":kakurasu_solver.KakurasuSolver,
+        "nonograms":nonograms_solver.NonogramsSolver,
+        "star-battle":star_battle_solver.StarBattleSolver,
+        "renzoku":renzoku_solver.RenzokuSolver,
+    }
+    if info["puzzle"] in solvers:
+        solver = solvers[info["puzzle"]](info)
     else:
         raise NotImplementedError(f"Solver for puzzle type '{info['puzzle']}' is not implemented.")
     #timing start
@@ -149,7 +152,7 @@ def run_solver(driver):
         offset = sum(map(lambda v:len(v), info["horizontal_borders"])) + sum(map(lambda v:len(v), info["vertical_borders"]))
 
         
-    if info["puzzle"] in ["sudoku", "kakurasu","nonograms","star-battle"]:
+    if info["puzzle"] in ["sudoku", "kakurasu","nonograms","star-battle","renzoku"]:
         submitter = TableSubmitter(driver, info,offset=offset)
     else:
         raise NotImplementedError(f"Submitter for puzzle type '{info['puzzle']}' is not implemented.")

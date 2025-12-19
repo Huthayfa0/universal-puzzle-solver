@@ -8,8 +8,6 @@ class StarBattleSolver(BaseSolver):
         self.boxes=info["boxes"]
         self.boxes_table = self.info["boxes_table"]
         self.stars = self.info["items_per_box"]
-        self.height = self.info["height"]
-        self.width = self.info["width"]
         self.board = [[0 for _ in range(self.width)] for _ in range(self.height)]
         self.filling_boxes_cache={}
     def encode(self):

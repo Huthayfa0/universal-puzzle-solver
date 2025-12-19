@@ -60,10 +60,12 @@ class TableTaskParser(TaskParserBase):
         return task_data
 
 class BoxesTaskParser(TaskParserBase):
+    def parse_cell(self, s):
+        return int(s)-1
     def parse(self, raw_task):
         # Example parsing logic for table-based tasks
         task_data = {}
-        table = list(map(lambda x:int(x)-1 ,raw_task.split(",")))
+        table = list(map(self.parse_cell ,raw_task.split(",")))
         if self.info.get("height") is not None:
             task_data["height"] = self.info.get("height")
         else:
@@ -109,4 +111,49 @@ class BorderTaskParser(TaskParserBase):
         task_data["width"] = len(border) - task_data["height"]
         task_data["vertical_borders"] = border[:task_data["width"]] # up or down values
         task_data["horizontal_borders"] = border[task_data["width"]:] # left or right values
+        return task_data
+
+class CellTableTaskParser(TaskParserBase):
+    def parse_number(self, s):
+        num = ""
+        for char in s:
+            if char.isdigit():
+                num += char
+            else:
+                break
+        return int(num) if num else None
+
+    def parse_letters(self, s):
+        letters = []
+        for char in s:
+            if char.isalpha():
+                if char == 'D':
+                    letters.append((1,0))
+                elif char == 'U':
+                    letters.append((-1,0))
+                elif char == 'R':
+                    letters.append((0,1))
+                elif char == 'L':
+                    letters.append((0,-1))
+
+        return letters
+    def parse(self, raw_task):
+        # Example parsing logic for table-based tasks
+        task_data = {}
+        table = list(map(self.parse_number ,raw_task.split(",")))
+        cell_table = list(map(self.parse_letters ,raw_task.split(",")))
+        if self.info.get("height") is not None:
+            task_data["height"] = self.info.get("height")
+        else:
+            task_data["height"] = int(sqrt(len(table)))
+        task_data["width"] = len(table) // task_data["height"]
+        task_data["table"] = [
+            table[i:i + int(task_data["width"])]
+            for i in range(0, len(table)-1, int(task_data["width"]))
+        ]
+        task_data["cell_info_table"] = [
+            cell_table[i:i + int(task_data["width"])]
+            for i in range(0, len(cell_table)-1, int(task_data["width"]))
+        ]
+        
         return task_data
