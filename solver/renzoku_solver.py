@@ -4,8 +4,15 @@ class RenzokuSolver(BaseSolver):
     def __init__(self, info):
         super().__init__(info)
         self.board = self.info["table"]
-        self.cell_info = self.info["cell_info_table"]
-        self.all_dir = [(1,0),(-1,0),(0,1),(0,-1)]
+        self.adj_dot = [[] for _ in range(self.height)]
+        self.adj_ndot = [[] for _ in range(self.height)]
+        self.all_dir = {(1,0),(-1,0),(0,1),(0,-1)}
+        for i in range(self.height):
+            self.adj_dot[i]=self.info["cell_info_table"][i]
+            self.adj_ndot[i] = [[] for _ in range(self.width)]
+            for j in range(self.width):
+                self.adj_ndot[i][j] = [a for a in self.all_dir-set(self.info["cell_info_table"][i][j]) if 0<=a[0]+i<self.height and 0<=a[1]+j<self.width]
+            
 
 
     def solve(self):
@@ -24,13 +31,12 @@ class RenzokuSolver(BaseSolver):
             for x in range(self.height):
                 if self.board[x][col] == num:
                     return False
-            for v in self.cell_info[row][col]:
+            for v in self.adj_dot[row][col]:
                 if self.board[row+v[0]][col+v[1]]!=0 and abs(self.board[row+v[0]][col+v[1]]-num)>1:
                     return False
-            for v in self.all_dir:
-                if v not in self.cell_info[row][col] and 0<=row+v[0]<self.height and 0<=col + v[1] <self.width:
-                    if self.board[row+v[0]][col+v[1]]!=0 and abs(self.board[row+v[0]][col+v[1]]-num)<=1:
-                        return False
+            for v in self.adj_ndot[row][col]:
+                if self.board[row+v[0]][col+v[1]]!=0 and abs(self.board[row+v[0]][col+v[1]]-num)<=1:
+                    return False
             return True
 
         def possible_values(row, col):
@@ -41,13 +47,12 @@ class RenzokuSolver(BaseSolver):
             for x in range(self.height):
                 if self.board[x][col] in values:
                     values.remove(self.board[x][col])
-            for v in self.cell_info[row][col]:
+            for v in self.adj_dot[row][col]:
                 if self.board[row+v[0]][col+v[1]]!=0:
                     values = {c for c in values if abs(self.board[row+v[0]][col+v[1]]-c)==1 }
-            for v in self.all_dir:
-                if v not in self.cell_info[row][col] and 0<=row+v[0]<self.height and 0<=col + v[1] <self.width:
-                    if self.board[row+v[0]][col+v[1]]!=0:
-                        values = {c for c in values if abs(self.board[row+v[0]][col+v[1]]-c)>1 }
+            for v in self.adj_ndot[row][col]:
+                if self.board[row+v[0]][col+v[1]]!=0:
+                    values = {c for c in values if abs(self.board[row+v[0]][col+v[1]]-c)>1 }
             
             possible_values_cache[(row, col)] = values
             return list(values)
@@ -65,15 +70,14 @@ class RenzokuSolver(BaseSolver):
                     continue
                 for n in possible_values_cache[(i, j)]:
 
-                    for v in self.cell_info[i][j]:
+                    for v in self.adj_dot[i][j]:
                         lst = possible_values_cache.get((i+v[0],j+v[1]),{self.board[i+v[0]][j+v[1]]})
                         if n+1 not in lst and n-1 not in lst:
                             to_remv.add(n)
-                    for v in self.all_dir:
-                        if v not in self.cell_info[i][j] and 0<=i+v[0]<self.height and 0<=j + v[1] <self.width:
-                            lst = possible_values_cache.get((i+v[0],j+v[1]),{self.board[i+v[0]][j+v[1]]})
-                            if all(abs(x-n)<=1 for x in lst):
-                                to_remv.add(n)
+                    for v in self.adj_ndot[i][j]:
+                        lst = possible_values_cache.get((i+v[0],j+v[1]),{self.board[i+v[0]][j+v[1]]})
+                        if all(abs(x-n)<=1 for x in lst):
+                            to_remv.add(n)
                 updated+=len(to_remv)
                 possible_values_cache[(i, j)]-=to_remv
             

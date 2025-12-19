@@ -3,3 +3,4 @@ from . import kakurasu_solver
 from . import nonograms_solver
 from . import star_battle_solver
 from . import renzoku_solver
+from . import futoshiki_solver

@@ -81,7 +81,7 @@ def run_solver(driver):
     info = extract_task(driver)
 
     print("Detected puzzle:", info)
-    if info["puzzle"] in ["sudoku", "renzoku"]:
+    if info["puzzle"] in ["sudoku", "renzoku", "futoshiki"]:
         info["puzzle_type"] = "numeric"
     else:
         info["puzzle_type"] = ""
@@ -100,7 +100,7 @@ def run_solver(driver):
         parser = BorderTaskParser(info)
     elif info["puzzle"] in ["star-battle"]:
         parser = BoxesTaskParser(info)
-    elif info["puzzle"] in ["renzoku"]:
+    elif info["puzzle"] in ["renzoku","futoshiki"]:
         parser = CellTableTaskParser(info)
     else:
         raise NotImplementedError(f"Parser for puzzle type '{info['puzzle']}' is not implemented.")
@@ -131,6 +131,7 @@ def run_solver(driver):
         "nonograms":nonograms_solver.NonogramsSolver,
         "star-battle":star_battle_solver.StarBattleSolver,
         "renzoku":renzoku_solver.RenzokuSolver,
+        "futoshiki":futoshiki_solver.FutoshikiSolver
     }
     if info["puzzle"] in solvers:
         solver = solvers[info["puzzle"]](info)
@@ -152,7 +153,7 @@ def run_solver(driver):
         offset = sum(map(lambda v:len(v), info["horizontal_borders"])) + sum(map(lambda v:len(v), info["vertical_borders"]))
 
         
-    if info["puzzle"] in ["sudoku", "kakurasu","nonograms","star-battle","renzoku"]:
+    if info["puzzle"] in ["sudoku", "kakurasu","nonograms","star-battle","renzoku", "futoshiki"]:
         submitter = TableSubmitter(driver, info,offset=offset)
     else:
         raise NotImplementedError(f"Submitter for puzzle type '{info['puzzle']}' is not implemented.")
