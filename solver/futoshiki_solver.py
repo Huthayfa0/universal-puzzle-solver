@@ -1,4 +1,5 @@
 from .solver import BaseSolver
+from itertools import combinations
 import random
 class FutoshikiSolver(BaseSolver):
     def __init__(self, info):
@@ -19,6 +20,7 @@ class FutoshikiSolver(BaseSolver):
         # Implement a simple backtracking algorithm for Futoshiki
         possible_values_cache = {}
         cells_to_fill = []
+        dead_states = set()
         
         for i in range(self.height):
             for j in range(self.width):
@@ -65,6 +67,7 @@ class FutoshikiSolver(BaseSolver):
         
         def possible_values_trim():
             updated = 0
+            #Cleaning rows and cells where a number has only a single place to be
             for r in range(self.height):
                 num_positions = {n: [] for n in range(1, self.width + 1)}
                 for c in range(self.width):
@@ -77,8 +80,6 @@ class FutoshikiSolver(BaseSolver):
                         if possible_values_cache[cell] != {k}:
                             possible_values_cache[cell] = {k}
                             updated += 1
-                            
-
             for c in range(self.width):
                 num_positions = {n: [] for n in range(1, self.width + 1)}
                 for r in range(self.height):
@@ -91,6 +92,20 @@ class FutoshikiSolver(BaseSolver):
                         if possible_values_cache[cell] != {k}:
                             possible_values_cache[cell] = {k}
                             updated += 1
+            # if a cell have a single value it should be removed from everywhere else
+            for r in range(self.height):
+                for c in range(self.width):
+                    if (r, c) in possible_values_cache and len(possible_values_cache[(r, c)]) == 1:
+                        value = next(iter(possible_values_cache[(r, c)]))
+                        for cc in range(self.width):
+                            if cc != c and (r, cc) in possible_values_cache and value in possible_values_cache[(r, cc)]:
+                                possible_values_cache[(r, cc)].remove(value)
+                                updated += 1
+                        for rr in range(self.height):
+                            if rr != r and (rr, c) in possible_values_cache and value in possible_values_cache[(rr, c)]:
+                                possible_values_cache[(rr, c)].remove(value)
+                                updated += 1
+            #if a pair exists in two places then it must be removed from one
             for r in range(self.height):
                 pairs = {}
                 for c in range(self.width):
@@ -117,7 +132,38 @@ class FutoshikiSolver(BaseSolver):
                                         updated += 1
                         else:
                             pairs[pair] = r
+            for r in range(self.height):
+                cells = [(r, c) for c in range(self.width)
+                        if (r, c) in possible_values_cache and 2 <= len(possible_values_cache[(r, c)]) <= 3]
 
+                for combo in combinations(cells, 3):
+                    union_vals = set().union(*(possible_values_cache[cell] for cell in combo))
+                    if len(union_vals) == 3:
+                        for c in range(self.width):
+                            cell = (r, c)
+                            if cell in possible_values_cache and cell not in combo:
+                                before = set(possible_values_cache[cell])
+                                after = before - union_vals
+                                if after != before:
+                                    possible_values_cache[cell] = after
+                                    updated += 1
+
+            for c in range(self.width):
+                cells = [(r, c) for r in range(self.height)
+                        if (r, c) in possible_values_cache and 2 <= len(possible_values_cache[(r, c)]) <= 3]
+
+                for combo in combinations(cells, 3):
+                    union_vals = set().union(*(possible_values_cache[cell] for cell in combo))
+                    if len(union_vals) == 3:
+                        for r in range(self.height):
+                            cell = (r, c)
+                            if cell in possible_values_cache and cell not in combo:
+                                before = set(possible_values_cache[cell])
+                                after = before - union_vals
+                                if after != before:
+                                    possible_values_cache[cell] = after
+                                    updated += 1
+            #apply the more and less condition on the possiblities
             for i, j in possible_values_cache.keys():
                 
                 to_remv = set()
@@ -148,12 +194,11 @@ class FutoshikiSolver(BaseSolver):
             i, j = cells_to_fill[cell_idx]
             if self.board[i][j] != 0:
                 return solve_futoshiki(cell_idx + 1)
-            if len(possible_values_cache.get((i, j), range(1, self.width + 1)))>1:
-                possible_values_cache.clear()
-                cells_to_fill[cell_idx:] = sorted(cells_to_fill[cell_idx:], key=lambda x: len(possible_values(x[0], x[1])))
-                while possible_values_trim():
-                    pass
-                cells_to_fill[cell_idx:] = sorted(cells_to_fill[cell_idx:], key=lambda x: len(possible_values_extended(x[0], x[1])))
+            possible_values_cache.clear()
+            cells_to_fill[cell_idx:] = sorted(cells_to_fill[cell_idx:], key=lambda x: len(possible_values(x[0], x[1])))
+            while possible_values_trim():
+                pass
+            cells_to_fill[cell_idx:] = sorted(cells_to_fill[cell_idx:], key=lambda x: (len(possible_values_extended(x[0], x[1])),-(len(self.adj_less[x[0]][x[1]])+len(self.adj_more[x[0]][x[1]]))))
                 # print(f"At cell_idx {cell_idx}, {len(cells_to_fill) - cell_idx} cells left to fill.")
             i, j = cells_to_fill[cell_idx]
             if self.board[i][j] != 0:
@@ -161,12 +206,12 @@ class FutoshikiSolver(BaseSolver):
             
             # print(possible_values_cache)
             pos_lst =list(possible_values_cache.get((i, j), range(1, self.width + 1)))
-            if len(pos_lst)>1:
-                print(cell_idx,i,j)
-                print(list(pos_lst))
+            # if len(pos_lst)!=1:
+            print(cell_idx,i,j)
+            print(list(pos_lst))
             for num in pos_lst:
                 if is_valid(num, i, j):
-                    # if self.mx_idx-cell_idx >60 and len(pos_lst)>1 and num==pos_lst[1]:
+                    # if cell_idx >=19 and len(pos_lst)>1:
                     #     print(cell_idx,i,j,self.mx_idx)
                     #     return True
                     self.board[i][j] = num
