@@ -188,9 +188,9 @@ class FutoshikiSolver(BaseSolver):
             
             # print(possible_values_cache)
             pos_lst =list(possible_values_cache.get((i, j), range(1, self.width + 1)))
-            if len(pos_lst)!=1:
-                print(cell_idx,i,j)
-                print(list(pos_lst))
+            # if len(pos_lst)!=1:
+            #     print(cell_idx,i,j)
+            #     print(list(pos_lst))
             for num in pos_lst:
                 if is_valid(num, i, j):
                     # if cell_idx >=19 and len(pos_lst)>1:

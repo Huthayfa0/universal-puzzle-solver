@@ -157,3 +157,19 @@ class CellTableTaskParser(TaskParserBase):
         ]
         
         return task_data
+    
+class TableBoxesTaskParser(TableTaskParser, BoxesTaskParser):
+    def parse(self, raw_task):
+        raw_tasks = raw_task.split(";")
+        if len(raw_tasks) != 2:
+            raise ValueError("Expected raw_task to contain two parts separated by a semicolon.")
+        
+        table_raw_task, boxes_raw_task = raw_tasks
+        table_data = TableTaskParser.parse(self, table_raw_task)
+        boxes_data = BoxesTaskParser.parse(self, boxes_raw_task)
+        
+        # Combine the parsed data from both parsers
+        combined_data = {}
+        combined_data.update(table_data)
+        combined_data.update(boxes_data)
+        return combined_data

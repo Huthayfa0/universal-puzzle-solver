@@ -81,14 +81,14 @@ def run_solver(driver):
     info = extract_task(driver)
 
     print("Detected puzzle:", info)
-    if info["puzzle"] in ["sudoku", "renzoku", "futoshiki"]:
+    if info["puzzle"] in ["sudoku", "renzoku", "futoshiki", "jigsaw-sudoku"]:
         info["puzzle_type"] = "numeric"
     else:
         info["puzzle_type"] = ""
 
     if info["puzzle"] in ["sudoku"]:
         info["subtable_type"] = "regular" #squares
-    elif info["puzzle"] in ["star-battle"]:
+    elif info["puzzle"] in ["star-battle","jigsaw-sudoku"]:
         info["subtable_type"] = "irregular" #squares
     else:
         info["subtable_type"] = "no_tables"
@@ -102,6 +102,8 @@ def run_solver(driver):
         parser = BoxesTaskParser(info)
     elif info["puzzle"] in ["renzoku","futoshiki"]:
         parser = CellTableTaskParser(info)
+    elif info["puzzle"] in ["jigsaw-sudoku"]:
+        parser = TableBoxesTaskParser(info)
     else:
         raise NotImplementedError(f"Parser for puzzle type '{info['puzzle']}' is not implemented.")
     
@@ -131,7 +133,8 @@ def run_solver(driver):
         "nonograms":nonograms_solver.NonogramsSolver,
         "star-battle":star_battle_solver.StarBattleSolver,
         "renzoku":renzoku_solver.RenzokuSolver,
-        "futoshiki":futoshiki_solver.FutoshikiSolver
+        "futoshiki":futoshiki_solver.FutoshikiSolver,
+        "jigsaw-sudoku":jigsaw_sudoku_solver.JigsawSudokuSolver
     }
     if info["puzzle"] in solvers:
         solver = solvers[info["puzzle"]](info)
@@ -153,7 +156,7 @@ def run_solver(driver):
         offset = sum(map(lambda v:len(v), info["horizontal_borders"])) + sum(map(lambda v:len(v), info["vertical_borders"]))
 
         
-    if info["puzzle"] in ["sudoku", "kakurasu","nonograms","star-battle","renzoku", "futoshiki"]:
+    if info["puzzle"] in ["sudoku", "kakurasu","nonograms","star-battle","renzoku", "futoshiki", "jigsaw-sudoku"]:
         submitter = TableSubmitter(driver, info,offset=offset)
     else:
         raise NotImplementedError(f"Submitter for puzzle type '{info['puzzle']}' is not implemented.")
