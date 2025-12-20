@@ -92,77 +92,59 @@ class FutoshikiSolver(BaseSolver):
                         if possible_values_cache[cell] != {k}:
                             possible_values_cache[cell] = {k}
                             updated += 1
-            # if a cell have a single value it should be removed from everywhere else
+            Kmax = 5  # you can tune this (usually 4–5 is already very strong)
+
+            # -------- General naked k-subsets (rows) --------
             for r in range(self.height):
-                for c in range(self.width):
-                    if (r, c) in possible_values_cache and len(possible_values_cache[(r, c)]) == 1:
-                        value = next(iter(possible_values_cache[(r, c)]))
-                        for cc in range(self.width):
-                            if cc != c and (r, cc) in possible_values_cache and value in possible_values_cache[(r, cc)]:
-                                possible_values_cache[(r, cc)].remove(value)
-                                updated += 1
-                        for rr in range(self.height):
-                            if rr != r and (rr, c) in possible_values_cache and value in possible_values_cache[(rr, c)]:
-                                possible_values_cache[(rr, c)].remove(value)
-                                updated += 1
-            #if a pair exists in two places then it must be removed from one
-            for r in range(self.height):
-                pairs = {}
-                for c in range(self.width):
-                    if (r, c) in possible_values_cache and len(possible_values_cache[(r, c)]) == 2:
-                        pair = tuple(sorted(possible_values_cache[(r, c)]))
-                        if pair in pairs:
-                            for cc in range(self.width):
-                                if cc != c and cc != pairs[pair] and (r, cc) in possible_values_cache:
-                                    if pair[0] in possible_values_cache[(r, cc)] or pair[1] in possible_values_cache[(r, cc)]:
-                                        possible_values_cache[(r, cc)] -= set(pair)
+                unit_cells = [
+                    (r, c) for c in range(self.width)
+                    if (r, c) in possible_values_cache
+                ]
+
+                for k in range(1, min(Kmax, len(unit_cells)) + 1):
+                    candidates = [
+                        cell for cell in unit_cells
+                        if 1 <= len(possible_values_cache[cell]) <= k
+                    ]
+
+                    for combo in combinations(candidates, k):
+                        union_vals = set().union(
+                            *(possible_values_cache[cell] for cell in combo)
+                        )
+                        if len(union_vals) == k:
+                            for cell in unit_cells:
+                                if cell not in combo:
+                                    before = set(possible_values_cache[cell])
+                                    after = before - union_vals
+                                    if after != before:
+                                        possible_values_cache[cell] = after
                                         updated += 1
-                        else:
-                            pairs[pair] = c
+
+            # -------- General naked k-subsets (columns) --------
             for c in range(self.width):
-                pairs = {}
-                for r in range(self.height):
-                    if (r, c) in possible_values_cache and len(possible_values_cache[(r, c)]) == 2:
-                        pair = tuple(sorted(possible_values_cache[(r, c)]))
-                        if pair in pairs:
-                            for rr in range(self.height):
-                                if rr != r and rr != pairs[pair] and (rr, c) in possible_values_cache:
-                                    if pair[0] in possible_values_cache[(rr, c)] or pair[1] in possible_values_cache[(rr, c)]:
-                                        possible_values_cache[(rr, c)] -= set(pair)
+                unit_cells = [
+                    (r, c) for r in range(self.height)
+                    if (r, c) in possible_values_cache
+                ]
+
+                for k in range(1, min(Kmax, len(unit_cells)) + 1):
+                    candidates = [
+                        cell for cell in unit_cells
+                        if 1 <= len(possible_values_cache[cell]) <= k
+                    ]
+
+                    for combo in combinations(candidates, k):
+                        union_vals = set().union(
+                            *(possible_values_cache[cell] for cell in combo)
+                        )
+                        if len(union_vals) == k:
+                            for cell in unit_cells:
+                                if cell not in combo:
+                                    before = set(possible_values_cache[cell])
+                                    after = before - union_vals
+                                    if after != before:
+                                        possible_values_cache[cell] = after
                                         updated += 1
-                        else:
-                            pairs[pair] = r
-            for r in range(self.height):
-                cells = [(r, c) for c in range(self.width)
-                        if (r, c) in possible_values_cache and 2 <= len(possible_values_cache[(r, c)]) <= 3]
-
-                for combo in combinations(cells, 3):
-                    union_vals = set().union(*(possible_values_cache[cell] for cell in combo))
-                    if len(union_vals) == 3:
-                        for c in range(self.width):
-                            cell = (r, c)
-                            if cell in possible_values_cache and cell not in combo:
-                                before = set(possible_values_cache[cell])
-                                after = before - union_vals
-                                if after != before:
-                                    possible_values_cache[cell] = after
-                                    updated += 1
-
-            for c in range(self.width):
-                cells = [(r, c) for r in range(self.height)
-                        if (r, c) in possible_values_cache and 2 <= len(possible_values_cache[(r, c)]) <= 3]
-
-                for combo in combinations(cells, 3):
-                    union_vals = set().union(*(possible_values_cache[cell] for cell in combo))
-                    if len(union_vals) == 3:
-                        for r in range(self.height):
-                            cell = (r, c)
-                            if cell in possible_values_cache and cell not in combo:
-                                before = set(possible_values_cache[cell])
-                                after = before - union_vals
-                                if after != before:
-                                    possible_values_cache[cell] = after
-                                    updated += 1
             #apply the more and less condition on the possiblities
             for i, j in possible_values_cache.keys():
                 
@@ -206,9 +188,9 @@ class FutoshikiSolver(BaseSolver):
             
             # print(possible_values_cache)
             pos_lst =list(possible_values_cache.get((i, j), range(1, self.width + 1)))
-            # if len(pos_lst)!=1:
-            print(cell_idx,i,j)
-            print(list(pos_lst))
+            if len(pos_lst)!=1:
+                print(cell_idx,i,j)
+                print(list(pos_lst))
             for num in pos_lst:
                 if is_valid(num, i, j):
                     # if cell_idx >=19 and len(pos_lst)>1:
