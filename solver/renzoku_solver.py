@@ -1,5 +1,5 @@
 from .solver import BaseSolver
-
+from itertools import combinations
 class RenzokuSolver(BaseSolver):
     def __init__(self, info):
         super().__init__(info)
@@ -64,6 +64,66 @@ class RenzokuSolver(BaseSolver):
         
         def possible_values_trim():
             updated = 0
+
+            # hidden singles (rows)
+            for r in range(self.height):
+                num_positions = {n: [] for n in range(1, self.width + 1)}
+                for c in range(self.width):
+                    if (r, c) in possible_values_cache:
+                        for n in possible_values_cache[(r, c)]:
+                            num_positions[n].append((r, c))
+                for n, cells in num_positions.items():
+                    if len(cells) == 1:
+                        cell = cells[0]
+                        if possible_values_cache[cell] != {n}:
+                            possible_values_cache[cell] = {n}
+                            updated += 1
+
+            # hidden singles (columns)
+            for c in range(self.width):
+                num_positions = {n: [] for n in range(1, self.width + 1)}
+                for r in range(self.height):
+                    if (r, c) in possible_values_cache:
+                        for n in possible_values_cache[(r, c)]:
+                            num_positions[n].append((r, c))
+                for n, cells in num_positions.items():
+                    if len(cells) == 1:
+                        cell = cells[0]
+                        if possible_values_cache[cell] != {n}:
+                            possible_values_cache[cell] = {n}
+                            updated += 1
+
+            # naked subsets (rows & columns)
+            Kmax = 6
+
+            for r in range(self.height):
+                unit = [(r, c) for c in range(self.width) if (r, c) in possible_values_cache]
+                for k in range(1, min(Kmax, len(unit)) + 1):
+                    for combo in combinations(unit, k):
+                        union_vals = set().union(*(possible_values_cache[x] for x in combo))
+                        if len(union_vals) == k:
+                            for cell in unit:
+                                if cell not in combo:
+                                    before = set(possible_values_cache[cell])
+                                    after = before - union_vals
+                                    if after != before:
+                                        possible_values_cache[cell] = after
+                                        updated += 1
+
+            for c in range(self.width):
+                unit = [(r, c) for r in range(self.height) if (r, c) in possible_values_cache]
+                for k in range(1, min(Kmax, len(unit)) + 1):
+                    for combo in combinations(unit, k):
+                        union_vals = set().union(*(possible_values_cache[x] for x in combo))
+                        if len(union_vals) == k:
+                            for cell in unit:
+                                if cell not in combo:
+                                    before = set(possible_values_cache[cell])
+                                    after = before - union_vals
+                                    if after != before:
+                                        possible_values_cache[cell] = after
+                                        updated += 1
+
             for i, j in possible_values_cache.keys():
                 to_remv = set()
                 if self.board[i][j]!=0:

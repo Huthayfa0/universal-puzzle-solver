@@ -81,7 +81,7 @@ def run_solver(driver):
     info = extract_task(driver)
 
     print("Detected puzzle:", info)
-    if info["puzzle"] in ["sudoku", "renzoku", "futoshiki", "jigsaw-sudoku"]:
+    if info["puzzle"] in ["sudoku", "renzoku", "futoshiki", "jigsaw-sudoku", "skyscrapers"]:
         info["puzzle_type"] = "numeric"
     else:
         info["puzzle_type"] = ""
@@ -93,6 +93,9 @@ def run_solver(driver):
     else:
         info["subtable_type"] = "no_tables"
 
+    if info["puzzle"] in ["skyscrapers"]:
+        info["double_borders"] = True
+
     # Step 2: Parse the task
     if info["puzzle"] in ["sudoku"]:
         parser = TableTaskParser(info)
@@ -103,7 +106,9 @@ def run_solver(driver):
     elif info["puzzle"] in ["renzoku","futoshiki"]:
         parser = CellTableTaskParser(info)
     elif info["puzzle"] in ["jigsaw-sudoku"]:
-        parser = TableBoxesTaskParser(info)
+        parser = CombinedTaskParser(info,[TableTaskParser,BoxesTaskParser])
+    elif info["puzzle"] in ["skyscrapers"]:
+        parser = CombinedTaskParser(info,[BorderTaskParser,TableTaskParser],",")
     else:
         raise NotImplementedError(f"Parser for puzzle type '{info['puzzle']}' is not implemented.")
     
@@ -134,12 +139,17 @@ def run_solver(driver):
         "star-battle":star_battle_solver.StarBattleSolver,
         "renzoku":renzoku_solver.RenzokuSolver,
         "futoshiki":futoshiki_solver.FutoshikiSolver,
-        "jigsaw-sudoku":jigsaw_sudoku_solver.JigsawSudokuSolver
+        "jigsaw-sudoku":jigsaw_sudoku_solver.JigsawSudokuSolver,
+        "skyscrapers":skyscrapers_solver.SkyscrapersSolver
     }
+    start_time = time.time()
     if info["puzzle"] in solvers:
         solver = solvers[info["puzzle"]](info)
     else:
         raise NotImplementedError(f"Solver for puzzle type '{info['puzzle']}' is not implemented.")
+    end_time = time.time()
+    time_diff = end_time - start_time
+    print(f"Initiated puzzle solver in {time_diff:.2f} seconds.")
     #timing start
 
     start_time = time.time()
@@ -156,7 +166,7 @@ def run_solver(driver):
         offset = sum(map(lambda v:len(v), info["horizontal_borders"])) + sum(map(lambda v:len(v), info["vertical_borders"]))
 
         
-    if info["puzzle"] in ["sudoku", "kakurasu","nonograms","star-battle","renzoku", "futoshiki", "jigsaw-sudoku"]:
+    if info["puzzle"] in ["sudoku", "kakurasu","nonograms","star-battle","renzoku", "futoshiki", "jigsaw-sudoku", "skyscrapers"]:
         submitter = TableSubmitter(driver, info,offset=offset)
     else:
         raise NotImplementedError(f"Submitter for puzzle type '{info['puzzle']}' is not implemented.")
@@ -167,7 +177,7 @@ def run_solver(driver):
                 for j in range(info["width"]):
                     if info["solution"][i][j] == 2:
                         info["solution"][i][j] = 0
-        if info["puzzle"] in ["star-battle"]:
+        elif info["puzzle"] in ["star-battle"]:
             for i in range(info["height"]):
                 for j in range(info["width"]):
                     if info["solution"][i][j] == 1:

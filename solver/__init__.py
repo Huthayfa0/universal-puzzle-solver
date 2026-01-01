@@ -5,3 +5,4 @@ from . import star_battle_solver
 from . import renzoku_solver
 from . import futoshiki_solver
 from . import jigsaw_sudoku_solver
+from . import skyscrapers_solver

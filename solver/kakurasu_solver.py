@@ -92,6 +92,6 @@ class KakurasuSolver(BaseSolver):
         while s > 0:
             print(s)
             s = self.submit_common()
-        self.solve_puzzle() ## surprisingly not needed
+        # self.solve_puzzle() ## surprisingly not needed
         print(self.board)
         return self.board

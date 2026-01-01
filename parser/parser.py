@@ -111,6 +111,9 @@ class BorderTaskParser(TaskParserBase):
         task_data["width"] = len(border) - task_data["height"]
         task_data["vertical_borders"] = border[:task_data["width"]] # up or down values
         task_data["horizontal_borders"] = border[task_data["width"]:] # left or right values
+        if "double_borders" in self.info:
+            task_data["height"]//=2
+            task_data["width"]//=2
         return task_data
 
 class CellTableTaskParser(TaskParserBase):
@@ -158,18 +161,19 @@ class CellTableTaskParser(TaskParserBase):
         
         return task_data
     
-class TableBoxesTaskParser(TableTaskParser, BoxesTaskParser):
+class CombinedTaskParser(TaskParserBase):
+    def __init__(self, info={},parsers = [],splitter = ";"):
+        TaskParserBase.__init__(self,info)
+        self.parsers = parsers
+        self.splitter = splitter
     def parse(self, raw_task):
-        raw_tasks = raw_task.split(";")
-        if len(raw_tasks) != 2:
-            raise ValueError("Expected raw_task to contain two parts separated by a semicolon.")
-        
-        table_raw_task, boxes_raw_task = raw_tasks
-        table_data = TableTaskParser.parse(self, table_raw_task)
-        boxes_data = BoxesTaskParser.parse(self, boxes_raw_task)
-        
-        # Combine the parsed data from both parsers
+        raw_tasks = raw_task.split(self.splitter)
         combined_data = {}
-        combined_data.update(table_data)
-        combined_data.update(boxes_data)
+        for raw_task in range(len(raw_tasks)):
+            parser=self.parsers[raw_task](self.info)
+            data = parser.parse(raw_tasks[raw_task])
+            combined_data.update(data)
+
         return combined_data
+
+
