@@ -172,7 +172,16 @@ class CombinedTaskParser(TaskParserBase):
         for raw_task in range(len(raw_tasks)):
             parser=self.parsers[raw_task](self.info)
             data = parser.parse(raw_tasks[raw_task])
-            combined_data.update(data)
+            for k in data:
+                if k in combined_data:
+                    suffix = 2
+                    new_key = f"{k}_{suffix}"
+                    while new_key in combined_data:
+                        suffix += 1
+                        new_key = f"{k}_{suffix}"
+                    combined_data[new_key] = data[k]
+                else:
+                    combined_data[k] = data[k]
 
         return combined_data
 

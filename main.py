@@ -81,18 +81,20 @@ def run_solver(driver):
     info = extract_task(driver)
 
     print("Detected puzzle:", info)
-    if info["puzzle"] in ["sudoku", "renzoku", "futoshiki", "jigsaw-sudoku", "skyscrapers"]:
+    if info["puzzle"] in ["sudoku", "renzoku", "futoshiki", "jigsaw-sudoku", "skyscrapers", "killer-sudoku"]:
         info["puzzle_type"] = "numeric"
     else:
         info["puzzle_type"] = ""
 
-    if info["puzzle"] in ["sudoku"]:
+    if info["puzzle"] in ["sudoku", "killer-sudoku"]:
         info["subtable_type"] = "regular" #squares
     elif info["puzzle"] in ["star-battle","jigsaw-sudoku"]:
         info["subtable_type"] = "irregular" #squares
     else:
         info["subtable_type"] = "no_tables"
 
+    if info["puzzle"]=="killer-sudoku" and info["type"] in ["weekly","monthly"]:
+        info["subtable_type"] = "irregular"
     if info["puzzle"] in ["skyscrapers"]:
         info["double_borders"] = True
 
@@ -109,6 +111,11 @@ def run_solver(driver):
         parser = CombinedTaskParser(info,[TableTaskParser,BoxesTaskParser])
     elif info["puzzle"] in ["skyscrapers"]:
         parser = CombinedTaskParser(info,[BorderTaskParser,TableTaskParser],",")
+    elif info["puzzle"] in ["killer-sudoku"]:
+        if info["subtable_type"] == "regular":
+            parser = CombinedTaskParser(info, [TableTaskParser,BoxesTaskParser,TableTaskParser])
+        elif info["subtable_type"] == "irregular":
+            parser = CombinedTaskParser(info, [TableTaskParser,BoxesTaskParser,BoxesTaskParser,TableTaskParser])
     else:
         raise NotImplementedError(f"Parser for puzzle type '{info['puzzle']}' is not implemented.")
     
@@ -120,9 +127,11 @@ def run_solver(driver):
     print("Parsed task data:", parsed_task)
     info.update(parsed_task)
 
-    if info["puzzle"] in ["sudoku"]:
+    if info["puzzle"] in ["sudoku", "killer-sudoku"]:
         if info["height"]==16:
             info["subtable_height"] = 4
+        elif info["height"] in [4,6]:
+            info["subtable_height"] = 2
         else:
             info["subtable_height"] = 3
         info["subtable_width"] = info["height"] // info["subtable_height"]
@@ -131,6 +140,8 @@ def run_solver(driver):
         info["items_per_box"]=1 + (info["height"] >=10) + (info["height"] >=14) + (info["height"] >=17) +\
                                         (info["height"] >=21) + (info["height"] >=25)
     
+    if info["puzzle"]=="killer-sudoku" :
+        info["killer_x"] = info["type"] in ["daily","monthly"]
     # Step 3: Solve puzzle
     solvers = {
         "sudoku":sudoku_solver.SudokuSolver,
@@ -140,7 +151,8 @@ def run_solver(driver):
         "renzoku":renzoku_solver.RenzokuSolver,
         "futoshiki":futoshiki_solver.FutoshikiSolver,
         "jigsaw-sudoku":sudoku_solver.SudokuSolver,
-        "skyscrapers":skyscrapers_solver.SkyscrapersSolver
+        "skyscrapers":skyscrapers_solver.SkyscrapersSolver,
+        "killer-sudoku":killer_sudoku_solver.KillerSudokuSolver
     }
     start_time = time.time()
     if info["puzzle"] in solvers:
@@ -166,7 +178,7 @@ def run_solver(driver):
         offset = sum(map(lambda v:len(v), info["horizontal_borders"])) + sum(map(lambda v:len(v), info["vertical_borders"]))
 
         
-    if info["puzzle"] in ["sudoku", "kakurasu","nonograms","star-battle","renzoku", "futoshiki", "jigsaw-sudoku", "skyscrapers"]:
+    if info["puzzle"] in ["sudoku", "kakurasu","nonograms","star-battle","renzoku", "futoshiki", "jigsaw-sudoku", "skyscrapers", "killer-sudoku"]:
         submitter = TableSubmitter(driver, info,offset=offset)
     else:
         raise NotImplementedError(f"Submitter for puzzle type '{info['puzzle']}' is not implemented.")
