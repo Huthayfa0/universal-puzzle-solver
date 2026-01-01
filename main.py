@@ -139,7 +139,7 @@ def run_solver(driver):
         "star-battle":star_battle_solver.StarBattleSolver,
         "renzoku":renzoku_solver.RenzokuSolver,
         "futoshiki":futoshiki_solver.FutoshikiSolver,
-        "jigsaw-sudoku":jigsaw_sudoku_solver.JigsawSudokuSolver,
+        "jigsaw-sudoku":sudoku_solver.SudokuSolver,
         "skyscrapers":skyscrapers_solver.SkyscrapersSolver
     }
     start_time = time.time()
