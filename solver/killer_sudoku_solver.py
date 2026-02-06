@@ -1,16 +1,49 @@
 from .sudoku_solver import SudokuSolver
+
+
 class KillerSudokuSolver(SudokuSolver):
+    """Solver for Killer Sudoku puzzles.
+    
+    Killer Sudoku adds cage constraints where cells in a cage must sum to a target,
+    and optionally diagonal constraints (X variant).
+    """
+    
     def __init__(self, info):
+        """Initialize the Killer Sudoku solver.
+        
+        Args:
+            info: Dictionary containing puzzle information including:
+                - boxes/boxes_2: Cage definitions
+                - boxes_table/boxes_table_2: Cage ID for each cell
+                - table_2: Cage target sums
+                - killer_x: Whether diagonal constraints apply
+        """
         super().__init__(info)
         self.trim_is_overkill = False
-        self.sum_boxes = self.info["boxes" if self.subtable_type == "regular" else "boxes_2"] #dict of the indecies of each box
-        self.sum_boxes_table = self.info["boxes_table" if self.subtable_type == "regular" else "boxes_table_2"] #the box in each cell
+        
+        # Use different box sets for regular vs irregular subtable types
+        if self.subtable_type == "regular":
+            self.sum_boxes = self.info["boxes"]
+            self.sum_boxes_table = self.info["boxes_table"]
+        else:
+            self.sum_boxes = self.info["boxes_2"]
+            self.sum_boxes_table = self.info["boxes_table_2"]
+        
+        # Extract cage target sums
         self.sums = [value for row in self.info["table_2"] for value in row if value != 0]
-        self.killer_x =info.get("killer_x", False) # True if there is an x codition other wise False
+        self.killer_x = info.get("killer_x", False)  # True if diagonal constraints apply
 
   
-    # --------------------------------------------------
     def _cage_info(self, row, col):
+        """Get information about the cage containing the given cell.
+        
+        Args:
+            row: Row index
+            col: Column index
+        
+        Returns:
+            Tuple of (filled_values, empty_count, target_sum)
+        """
         box = self.sum_boxes_table[row][col]
         cells = self.sum_boxes[box]
         target = self.sums[box]
@@ -29,8 +62,19 @@ class KillerSudokuSolver(SudokuSolver):
         return values, empty, target
 
     def _cage_allows(self, num, row, col):
+        """Check if placing a number satisfies cage sum constraints.
+        
+        Args:
+            num: Number to place
+            row: Row index
+            col: Column index
+        
+        Returns:
+            True if the placement is valid for the cage, False otherwise.
+        """
         values, empty, target = self._cage_info(row, col)
 
+        # Number already used in cage
         if num in values:
             return False
 
@@ -38,9 +82,11 @@ class KillerSudokuSolver(SudokuSolver):
         if s > target:
             return False
 
+        # Last empty cell must equal target
         if empty == 1:
             return s == target
 
+        # Check if target is achievable with remaining cells
         remaining = empty - 1
         unused = set(range(1, self.height + 1)) - set(values) - {num}
 
@@ -50,18 +96,28 @@ class KillerSudokuSolver(SudokuSolver):
         return (s + min_possible <= target) and (s + max_possible >= target)
 
     def _x_allows(self, num, row, col):
+        """Check if placing a number satisfies diagonal constraints (X variant).
+        
+        Args:
+            num: Number to place
+            row: Row index
+            col: Column index
+        
+        Returns:
+            True if valid, False otherwise.
+        """
         if not self.killer_x:
             return True
 
         n = self.height
 
-        # main diagonal
+        # Check main diagonal (top-left to bottom-right)
         if row == col:
             for i in range(n):
                 if self.board[i][i] == num:
                     return False
 
-        # anti-diagonal
+        # Check anti-diagonal (top-right to bottom-left)
         if row + col == n - 1:
             for i in range(n):
                 if self.board[i][n - 1 - i] == num:
@@ -69,20 +125,33 @@ class KillerSudokuSolver(SudokuSolver):
 
         return True
 
-    # --------------------------------------------------
-    # Validity
-    # --------------------------------------------------
     def is_valid(self, num, row, col):
+        """Check if placing a number is valid, including Killer Sudoku constraints.
+        
+        Args:
+            num: Number to place
+            row: Row index
+            col: Column index
+        
+        Returns:
+            True if valid, False otherwise.
+        """
         return (
             super().is_valid(num, row, col)
             and self._x_allows(num, row, col)
             and self._cage_allows(num, row, col)
         )
 
-    # --------------------------------------------------
-    # Possible values
-    # --------------------------------------------------
     def possible_values(self, row, col):
+        """Calculate possible values including Killer Sudoku constraints.
+        
+        Args:
+            row: Row index
+            col: Column index
+        
+        Returns:
+            List of possible values.
+        """
         values = set(super().possible_values(row, col))
 
         allowed = {
@@ -94,10 +163,12 @@ class KillerSudokuSolver(SudokuSolver):
         self.possible_values_cache[(row, col)] = allowed
         return list(allowed)
 
-    # --------------------------------------------------
-    # Trimming
-    # --------------------------------------------------
     def possible_values_trim(self):
+        """Apply Killer Sudoku constraint propagation.
+        
+        Returns:
+            Number of candidate eliminations made.
+        """
         updated = super().possible_values_trim()
 
         for (i, j), vals in list(self.possible_values_cache.items()):

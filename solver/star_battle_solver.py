@@ -1,36 +1,61 @@
 from .solver import BaseSolver
 from copy import copy, deepcopy
-import random 
+import random
+
 
 class StarBattleSolver(BaseSolver):
+    """Solver for Star Battle puzzles.
+    
+    Star Battle requires placing stars such that:
+    - Each row, column, and box has exactly N stars
+    - Stars cannot be adjacent (including diagonally)
+    """
+    
     def __init__(self, info):
+        """Initialize the Star Battle solver.
+        
+        Args:
+            info: Dictionary containing:
+                - boxes: List of box cell coordinates
+                - boxes_table: Box ID for each cell
+                - items_per_box: Number of stars per box/row/column
+        """
         super().__init__(info)
-        self.boxes=info["boxes"]
+        self.boxes = info["boxes"]
         self.boxes_table = self.info["boxes_table"]
         self.stars = self.info["items_per_box"]
         self.board = [[0 for _ in range(self.width)] for _ in range(self.height)]
-        self.filling_boxes_cache={}
+        self.filling_boxes_cache = {}  # Cache for box filling results
     def encode(self):
-        v=[]
-        for a in self.board:
-            x=1
-            s=0
-            for b in a:
-                s+=b*x
-                x*=3
-            v.append(s)
-        return tuple(v)
+        """Encode the board state as a tuple for caching.
+        
+        Returns:
+            Tuple representing the board state.
+        """
+        encoded = []
+        for row in self.board:
+            x = 1
+            s = 0
+            for cell in row:
+                s += cell * x
+                x *= 3
+            encoded.append(s)
+        return tuple(encoded)
 
     def count_row(self, i):
-        return sum(self.board[i][j]==2 for j in range(self.width))
+        """Count stars in a row (value 2 represents a star)."""
+        return sum(self.board[i][j] == 2 for j in range(self.width))
 
     def count_col(self, j):
-        return sum(self.board[i][j]==2 for i in range(self.height))
+        """Count stars in a column."""
+        return sum(self.board[i][j] == 2 for i in range(self.height))
 
     def count_box(self, v):
-        return sum(self.board[i][j]==2 for i, j in self.boxes[v])
+        """Count stars in a box."""
+        return sum(self.board[i][j] == 2 for i, j in self.boxes[v])
 
     def has_adjacent_star(self, i, j):
+        """Check if there's a star adjacent to the given cell (including diagonals)."""
         for di in (-1, 0, 1):
             for dj in (-1, 0, 1):
                 if di == 0 and dj == 0:
@@ -42,14 +67,18 @@ class StarBattleSolver(BaseSolver):
         return False
     
     def print_board(self):
+        """Print the board with box boundaries (for debugging)."""
         for i in range(self.height):
             for j in range(self.width):
-                print(self.board[i][j],end="|" if (j!=self.width-1 and self.boxes_table[i][j] != self.boxes_table[i][j+1]) else " ")
+                separator = "|" if (j != self.width - 1 and 
+                                   self.boxes_table[i][j] != self.boxes_table[i][j + 1]) else " "
+                print(self.board[i][j], end=separator)
             print()
-            if i==self.height-1:
+            if i == self.height - 1:
                 continue
             for j in range(self.width):
-                print(" " if self.boxes_table[i][j] == self.boxes_table[i+1][j] else "-" , end=" ")
+                separator = " " if self.boxes_table[i][j] == self.boxes_table[i + 1][j] else "-"
+                print(separator, end=" ")
             print()
 
     def max_non_adjacent_1d(self, positions):
@@ -259,26 +288,25 @@ class StarBattleSolver(BaseSolver):
             return self.solve_puzzle(cell_idx + 1)
         self.cells_order[cell_idx:] = sorted(self.cells_order[cell_idx:],key=lambda x:sum(self.board[v[0]][v[1]]==0 for v in self.boxes[self.boxes_table[x[0]][x[1]]]))
         
-        print(cell_idx,i,j)
-        self.print_board()
         # Try placing a star
-        board_save=deepcopy(self.board)
+        board_save = deepcopy(self.board)
         if self.can_place_star(i, j):
             self.board[i][j] = 2
+            # Mark adjacent cells as empty (cannot have stars)
             for di in (-1, 0, 1):
                 for dj in (-1, 0, 1):
                     if di == 0 and dj == 0:
                         continue
                     ni, nj = i + di, j + dj
                     if 0 <= ni < self.height and 0 <= nj < self.width:
-                        self.board[ni][nj] = 1 
+                        self.board[ni][nj] = 1
             if self.solve_puzzle(cell_idx + 1):
                 return True
-            self.board=board_save
+            self.board = board_save
 
-        if self.cant_place_empty(i,j):
+        # If we can't place a star, must place empty
+        if self.cant_place_empty(i, j):
             return False
-        print(cell_idx,i,j, "flling with 1 instead")
         self.board[i][j] = 1
         return self.solve_puzzle(cell_idx + 1)
 

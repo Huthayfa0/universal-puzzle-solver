@@ -1,41 +1,150 @@
 from math import sqrt
 
+
+class PuzzlePageError(Exception):
+    """Exception raised when the current page is not a valid puzzle page."""
+    pass
+
+
+def validate_puzzle_page(driver):
+    """Validate that the current page is a valid puzzle page.
+    
+    Args:
+        driver: Selenium WebDriver instance.
+    
+    Raises:
+        PuzzlePageError: If the page is not a valid puzzle page.
+    """
+    current_url = driver.current_url
+    
+    # Check if we're on puzzles-mobile.com
+    if "puzzles-mobile.com" not in current_url:
+        raise PuzzlePageError(
+            f"Not on puzzles-mobile.com. Current URL: {current_url}\n"
+            "Please navigate to a puzzle page on puzzles-mobile.com"
+        )
+    
+    # Check URL structure - should have puzzle type in path
+    url_parts = current_url.split("/")
+    if len(url_parts) < 4:
+        raise PuzzlePageError(
+            f"Invalid URL structure. Current URL: {current_url}\n"
+            "Please navigate to a specific puzzle page (e.g., puzzles-mobile.com/sudoku/daily)"
+        )
+    
+    # Check if Settings object exists
+    try:
+        settings_exists = driver.execute_script("return typeof Settings !== 'undefined';")
+        if not settings_exists:
+            raise PuzzlePageError(
+                "Settings object not found on page. This may not be a puzzle page.\n"
+                "Please ensure you're on an active puzzle page."
+            )
+    except Exception as e:
+        raise PuzzlePageError(
+            f"Error checking page state: {e}\n"
+            "Please ensure you're on a puzzle page and the page has fully loaded."
+        ) from e
+
+
 def extract_task(driver):
+    """Extract puzzle task information from the webpage.
+    
+    Reads the puzzle task from the browser's JavaScript Settings.bag object
+    and extracts puzzle type and task data from the current URL and page state.
+    
+    Args:
+        driver: Selenium WebDriver instance pointing to the puzzle page.
+    
+    Returns:
+        dict: Dictionary containing:
+            - "puzzle": Puzzle type (e.g., "sudoku", "kakurasu")
+            - "type": Puzzle difficulty/variant (e.g., "daily", "weekly")
+            - "task": Raw task string to be parsed
+    
+    Raises:
+        PuzzlePageError: If the page is not a valid puzzle page.
+        ValueError: If puzzle data cannot be extracted.
     """
-    Tries to read window.task (string).
-    Returns Python dictionary.
-    """
+    # First validate that we're on a puzzle page
+    validate_puzzle_page(driver)
+    
     info = {}
-    info["puzzle"] = driver.current_url.split("/")[3]
-    info["type"] = driver.current_url.split("/")[-1]
-    raw_task = driver.execute_script("return Settings.bag;")
+    url_parts = driver.current_url.split("/")
+    
+    # Extract puzzle type from URL
+    if len(url_parts) < 4:
+        raise PuzzlePageError(
+            f"Invalid URL structure. Expected format: puzzles-mobile.com/<puzzle-type>/<difficulty>\n"
+            f"Current URL: {driver.current_url}"
+        )
+    
+    info["puzzle"] = url_parts[3]
+    info["type"] = url_parts[-1]
+    
+    # Try to get Settings.bag
+    try:
+        raw_task = driver.execute_script("return Settings.bag;")
+    except Exception as e:
+        raise PuzzlePageError(
+            f"Error accessing Settings.bag: {e}\n"
+            "This may not be a puzzle page, or the page may not have fully loaded."
+        ) from e
 
     if not raw_task:
-        raise ValueError("No 'task' variable found on page.")
+        raise PuzzlePageError(
+            "No puzzle data found on page. Settings.bag is empty or null.\n"
+            "Please ensure you're on an active puzzle page with a puzzle loaded."
+        )
 
-    for keys in raw_task:
-        if ".save." in keys:
-            info["task"] = raw_task[keys]["task"]
-            return info
+    # Find task data in Settings.bag
+    for key in raw_task:
+        if ".save." in key:
+            task_data = raw_task[key].get("task")
+            if task_data:
+                info["task"] = task_data
+                return info
     
-    raise ValueError("No valid task data found in 'task' variable.")
+    raise PuzzlePageError(
+        "No valid task data found in Settings.bag.\n"
+        "The page may not have a puzzle loaded, or the puzzle format is unsupported."
+    )
 
 class TaskParserBase:
-    def __init__(self, info={}):
-        self.info = info
+    """Base class for all task parsers."""
+    
+    def __init__(self, info=None):
+        """Initialize the parser with puzzle information.
+        
+        Args:
+            info: Dictionary containing puzzle metadata (height, width, type, etc.)
+        """
+        self.info = info if info is not None else {}
 
     def parse(self, raw_task):
+        """Parse raw task string into structured puzzle data.
+        
+        Args:
+            raw_task: Raw task string from the webpage.
+        
+        Returns:
+            dict: Parsed puzzle data structure.
+        
+        Raises:
+            NotImplementedError: Must be implemented by subclasses.
+        """
         raise NotImplementedError("This method should be overridden by subclasses.")
 
 class TableTaskParser(TaskParserBase):
     def parse(self, raw_task):
-        # Example parsing logic for table-based tasks
+        """Parse table-based task into a 2D grid structure."""
         task_data = {}
         table = []
         char_idx = 0
-        while char_idx in range(len(raw_task)):
+        
+        while char_idx < len(raw_task):
             char = raw_task[char_idx]
-            if char == 'W' or char == 'B':
+            if char in ('W', 'B'):
                 table.append(char)
             elif char.isdigit():
                 char_start = char_idx
@@ -44,80 +153,97 @@ class TableTaskParser(TaskParserBase):
                 number = int(raw_task[char_start:char_idx + 1])
                 table.append(number)
             elif char == '_':
-                pass
+                pass  # Skip underscore
             else:
+                # Expand letter to multiple zeros (a=1, b=2, etc.)
                 table.extend([0] * (ord(char) - ord('a') + 1))
             char_idx += 1
+        
         if self.info.get("height") is not None:
             task_data["height"] = self.info.get("height")
         else:
             task_data["height"] = int(sqrt(len(table)))
         task_data["width"] = len(table) // task_data["height"]
         task_data["table"] = [
-            table[i:i + int(task_data["width"])]
-            for i in range(0, len(table), int(task_data["width"]))
+            table[i:i + task_data["width"]]
+            for i in range(0, len(table), task_data["width"])
         ]
         return task_data
 
 class BoxesTaskParser(TaskParserBase):
     def parse_cell(self, s):
-        return int(s)-1
+        """Parse a single cell value (1-indexed to 0-indexed)."""
+        return int(s) - 1
+    
     def parse(self, raw_task):
-        # Example parsing logic for table-based tasks
+        """Parse box-based task into boxes and borders structure."""
         task_data = {}
-        table = list(map(self.parse_cell ,raw_task.split(",")))
+        table = list(map(self.parse_cell, raw_task.split(",")))
+        
         if self.info.get("height") is not None:
             task_data["height"] = self.info.get("height")
         else:
             task_data["height"] = int(sqrt(len(table)))
         task_data["width"] = len(table) // task_data["height"]
         task_data["boxes_table"] = [
-            table[i:i + int(task_data["width"])]
-            for i in range(0, len(table), int(task_data["width"]))
+            table[i:i + task_data["width"]]
+            for i in range(0, len(table), task_data["width"])
         ]
-        boxes=[]
-        boxes_borders=[]
+        
+        boxes = []
+        boxes_borders = []
+        directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        
         for i in range(task_data["height"]):
             for j in range(task_data["width"]):
-                v = task_data["boxes_table"][i][j]
-                while v>=len(boxes):
+                box_id = task_data["boxes_table"][i][j]
+                while box_id >= len(boxes):
                     boxes.append([])
                     boxes_borders.append({})
-                boxes[v].append((i,j))
-                for dir in [(1,0),(-1,0),(0,1),(0,-1)]:
-                    if 0<=i+dir[0] <task_data["height"] and 0<=j+dir[1] <task_data["width"]:
-                        v2= task_data["boxes_table"][i+dir[0]][j+dir[1]]
-                        if v!= v2:
-                            boxes_borders[v].setdefault(v2,[])
-                            boxes_borders[v][v2].append((i,j,dir))
-        task_data["boxes"]=boxes
-        task_data["boxes_borders"]=boxes_borders
+                boxes[box_id].append((i, j))
+                
+                for direction in directions:
+                    ni, nj = i + direction[0], j + direction[1]
+                    if 0 <= ni < task_data["height"] and 0 <= nj < task_data["width"]:
+                        neighbor_box_id = task_data["boxes_table"][ni][nj]
+                        if box_id != neighbor_box_id:
+                            boxes_borders[box_id].setdefault(neighbor_box_id, [])
+                            boxes_borders[box_id][neighbor_box_id].append((i, j, direction))
+        
+        task_data["boxes"] = boxes
+        task_data["boxes_borders"] = boxes_borders
         return task_data
 
 class BorderTaskParser(TaskParserBase):
     def parse(self, raw_task):
-        # Example parsing logic for table-based tasks
+        """Parse border-based task into horizontal and vertical border constraints."""
         task_data = {}
+        
         if '.' in raw_task:
-            border = list(map(lambda x: x if x.isdigit() else x, raw_task.split('/')))
-            border = [list(map(lambda y: int(y) if y.isdigit() else y, x.split('.'))) for x in border]
+            border = raw_task.split('/')
+            border = [
+                [int(y) if y.isdigit() else y for y in x.split('.')]
+                for x in border
+            ]
         else:
-            border = list(map(lambda x: int(x) if x.isdigit() else x, raw_task.split('/')))
+            border = [int(x) if x.isdigit() else x for x in raw_task.split('/')]
         
         if self.info.get("height") is not None:
             task_data["height"] = self.info.get("height")
         else:
             task_data["height"] = len(border) // 2
         task_data["width"] = len(border) - task_data["height"]
-        task_data["vertical_borders"] = border[:task_data["width"]] # up or down values
-        task_data["horizontal_borders"] = border[task_data["width"]:] # left or right values
+        task_data["vertical_borders"] = border[:task_data["width"]]  # up or down values
+        task_data["horizontal_borders"] = border[task_data["width"]:]  # left or right values
+        
         if "double_borders" in self.info:
-            task_data["height"]//=2
-            task_data["width"]//=2
+            task_data["height"] //= 2
+            task_data["width"] //= 2
         return task_data
 
 class CellTableTaskParser(TaskParserBase):
     def parse_number(self, s):
+        """Extract leading digits from a string."""
         num = ""
         for char in s:
             if char.isdigit():
@@ -127,62 +253,63 @@ class CellTableTaskParser(TaskParserBase):
         return int(num) if num else None
 
     def parse_letters(self, s):
+        """Parse direction letters into coordinate offsets."""
+        direction_map = {
+            'D': (1, 0),   # Down
+            'U': (-1, 0),  # Up
+            'R': (0, 1),   # Right
+            'L': (0, -1),  # Left
+        }
         letters = []
         for char in s:
-            if char.isalpha():
-                if char == 'D':
-                    letters.append((1,0))
-                elif char == 'U':
-                    letters.append((-1,0))
-                elif char == 'R':
-                    letters.append((0,1))
-                elif char == 'L':
-                    letters.append((0,-1))
-
+            if char.isalpha() and char in direction_map:
+                letters.append(direction_map[char])
         return letters
+    
     def parse(self, raw_task):
-        # Example parsing logic for table-based tasks
+        """Parse cell-based task with numbers and direction constraints."""
         task_data = {}
-        table = list(map(self.parse_number ,raw_task.split(",")))
-        cell_table = list(map(self.parse_letters ,raw_task.split(",")))
+        cells = raw_task.split(",")
+        table = list(map(self.parse_number, cells))
+        cell_table = list(map(self.parse_letters, cells))
+        
         if self.info.get("height") is not None:
             task_data["height"] = self.info.get("height")
         else:
             task_data["height"] = int(sqrt(len(table)))
         task_data["width"] = len(table) // task_data["height"]
         task_data["table"] = [
-            table[i:i + int(task_data["width"])]
-            for i in range(0, len(table)-1, int(task_data["width"]))
+            table[i:i + task_data["width"]]
+            for i in range(0, len(table) - 1, task_data["width"])
         ]
         task_data["cell_info_table"] = [
-            cell_table[i:i + int(task_data["width"])]
-            for i in range(0, len(cell_table)-1, int(task_data["width"]))
+            cell_table[i:i + task_data["width"]]
+            for i in range(0, len(cell_table) - 1, task_data["width"])
         ]
-        
         return task_data
     
 class CombinedTaskParser(TaskParserBase):
-    def __init__(self, info={},parsers = [],splitter = ";"):
-        TaskParserBase.__init__(self,info)
-        self.parsers = parsers
+    def __init__(self, info={}, parsers=None, splitter=";"):
+        TaskParserBase.__init__(self, info)
+        self.parsers = parsers if parsers is not None else []
         self.splitter = splitter
+    
     def parse(self, raw_task):
         raw_tasks = raw_task.split(self.splitter)
         combined_data = {}
-        for raw_task in range(len(raw_tasks)):
-            parser=self.parsers[raw_task](self.info)
-            data = parser.parse(raw_tasks[raw_task])
-            for k in data:
-                if k in combined_data:
+        for task_index in range(len(raw_tasks)):
+            parser = self.parsers[task_index](self.info)
+            data = parser.parse(raw_tasks[task_index])
+            for key in data:
+                if key in combined_data:
                     suffix = 2
-                    new_key = f"{k}_{suffix}"
+                    new_key = f"{key}_{suffix}"
                     while new_key in combined_data:
                         suffix += 1
-                        new_key = f"{k}_{suffix}"
-                    combined_data[new_key] = data[k]
+                        new_key = f"{key}_{suffix}"
+                    combined_data[new_key] = data[key]
                 else:
-                    combined_data[k] = data[k]
-
+                    combined_data[key] = data[key]
         return combined_data
 
 

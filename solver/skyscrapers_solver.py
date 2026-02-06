@@ -1,7 +1,14 @@
 from .sudoku_solver import SudokuSolver
 from itertools import combinations
 from math import factorial
+
+
 class SkyscrapersSolver(SudokuSolver):
+    """Solver for Skyscrapers puzzles (Sudoku with visibility constraints).
+    
+    Skyscrapers adds clues indicating how many buildings are visible
+    from each side of the grid.
+    """
     def __init__(self, info):
         super().__init__(info)
         self.upper_clues = self.info["vertical_borders"][:self.width]
@@ -107,7 +114,7 @@ class SkyscrapersSolver(SudokuSolver):
             return result
 
         generate_states()
-        self.scrapers_states_collabsed= [collapse(self.scrapers_states[i]) for i in range(self.width+1)]
+        self.scrapers_states_collapsed = [collapse(self.scrapers_states[i]) for i in range(self.width + 1)]
 
     # ---------------- Skyscraper helpers ----------------
 
@@ -177,56 +184,71 @@ class SkyscrapersSolver(SudokuSolver):
         return list(values)
 
     def possible_values_trim(self):
+        """Apply Skyscrapers visibility constraint propagation.
+        
+        Returns:
+            Number of candidate eliminations made.
+        """
         updated = super().possible_values_trim()
+        
         def check_scrapers_states(clue, pos_vals):
-            all_pos = [x for x in
-                self.scrapers_states_collabsed[clue] 
-                if all(x[j] & pos_vals[j] for j in range(len(x)))]
+            """Filter possible states based on visibility clue and current possibilities."""
+            all_pos = [
+                x for x in self.scrapers_states_collapsed[clue]
+                if all(x[j] & pos_vals[j] for j in range(len(x)))
+            ]
             new_pos_vals = [set() for _ in range(len(pos_vals))]
             for v in all_pos:
                 for i in range(len(v)):
-                    new_pos_vals[i]|=v[i] & pos_vals[i]
+                    new_pos_vals[i] |= v[i] & pos_vals[i]
             return new_pos_vals
 
-        # ---------- visibility bounds (dead-state detection) ----------
+        # Apply visibility constraints to rows
         for r in range(self.height):
-            row = [self.possible_values_cache[(r, c)] if (r,c) in self.possible_values_cache else {self.board[r][c]} for c in range(self.width)]
+            row = [
+                self.possible_values_cache[(r, c)] if (r, c) in self.possible_values_cache
+                else {self.board[r][c]} for c in range(self.width)
+            ]
 
             if self.left_clues[r]:
-                updated_states = check_scrapers_states( self.left_clues[r], row)
+                updated_states = check_scrapers_states(self.left_clues[r], row)
                 for c in range(self.width):
-                    if (r,c) in self.possible_values_cache:
-                        self.possible_values_cache[(r,c)]=updated_states[c]
+                    if (r, c) in self.possible_values_cache:
+                        self.possible_values_cache[(r, c)] = updated_states[c]
                         if not updated_states[c]:
                             return 0
 
             if self.right_clues[r]:
-                updated_states = check_scrapers_states( self.right_clues[r], row[::-1])
+                updated_states = check_scrapers_states(self.right_clues[r], row[::-1])
                 updated_states = updated_states[::-1]
                 for c in range(self.width):
-                    if (r,c) in self.possible_values_cache:
-                        self.possible_values_cache[(r,c)]=updated_states[c]
+                    if (r, c) in self.possible_values_cache:
+                        self.possible_values_cache[(r, c)] = updated_states[c]
                         if not updated_states[c]:
                             return 0
 
+        # Apply visibility constraints to columns
         for c in range(self.width):
-            col = [self.possible_values_cache[(r, c)] if (r,c) in self.possible_values_cache else {self.board[r][c]} for r in range(self.height)]
+            col = [
+                self.possible_values_cache[(r, c)] if (r, c) in self.possible_values_cache
+                else {self.board[r][c]} for r in range(self.height)
+            ]
 
             if self.upper_clues[c]:
-                updated_states = check_scrapers_states( self.upper_clues[c], col)
+                updated_states = check_scrapers_states(self.upper_clues[c], col)
                 for r in range(self.height):
-                    if (r,c) in self.possible_values_cache:
-                        self.possible_values_cache[(r,c)]=updated_states[r]
+                    if (r, c) in self.possible_values_cache:
+                        self.possible_values_cache[(r, c)] = updated_states[r]
                         if not updated_states[r]:
                             return 0
+            
             if self.lower_clues[c]:
-                updated_states = check_scrapers_states( self.lower_clues[c], col[::-1])
+                updated_states = check_scrapers_states(self.lower_clues[c], col[::-1])
                 updated_states = updated_states[::-1]
                 for r in range(self.height):
-                    if (r,c) in self.possible_values_cache:
-                        self.possible_values_cache[(r,c)]=updated_states[r]
+                    if (r, c) in self.possible_values_cache:
+                        self.possible_values_cache[(r, c)] = updated_states[r]
                         if not updated_states[r]:
                             return 0
         
-        # print(f"Possible values trimmed, {updated} updates made.")
         return updated

@@ -1,12 +1,16 @@
-from selenium.webdriver.common.by import By
-from time import sleep
 import random
+from time import sleep
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
-from selenium.common.exceptions import ElementClickInterceptedException, ElementNotInteractableException
+from selenium.common.exceptions import (
+    ElementClickInterceptedException,
+    ElementNotInteractableException,
+)
 
 
 def human_delay():
+    """Add a random human-like delay between actions."""
     sleep(random.uniform(0.05, 0.15))
 
 # -----------------------------------------------------------------------------
@@ -87,38 +91,44 @@ def smart_write_number(driver, element, number):
     smart_write(driver, element, number if number <= 9 else chr(number - 10 + ord('a')))
 
 class SubmitterBase:
-    def __init__(self, driver, info={},offset=0):
+    def __init__(self, driver, info=None, offset=0):
         self.driver = driver
-        self.info = info
+        self.info = info if info is not None else {}
         self.extract(offset)
 
-    def extract(self,offset=0):
+    def extract(self, offset=0):
+        """Extract all selectable cells from the page."""
         self.all_cells = self.driver.find_elements(By.CSS_SELECTOR, ".selectable")
         
     def submit(self, solution):
+        """Submit the solution to the puzzle. Must be overridden by subclasses."""
         raise NotImplementedError("This method should be overridden by subclasses.")
     
     def submit_val(self, cell, value):
+        """Submit a single value to a cell based on puzzle type."""
         puzzle_type = self.info.get("puzzle_type", "")
         if puzzle_type == "":
+            # For non-numeric puzzles, click the cell multiple times
             for _ in range(value):
                 smart_click(self.driver, cell)
         elif puzzle_type == "numeric":
+            # For numeric puzzles, write the number directly
             smart_write_number(self.driver, cell, value)
     
 class TableSubmitter(SubmitterBase):
-    def extract(self,offset=0):
+    def extract(self, offset=0):
+        """Extract table cells and organize them into a 2D grid."""
         super().extract(offset)
-        self.cells=[]
-        for cellx in range(self.info["height"]):
+        self.cells = []
+        for row in range(self.info["height"]):
             cells_row = []
-            for celly in range(self.info["width"]):
-                index=cellx*self.info["width"]+celly + offset
+            for col in range(self.info["width"]):
+                index = row * self.info["width"] + col + offset
                 cells_row.append(self.all_cells[index])
             self.cells.append(cells_row)
 
-    
     def submit(self, solution):
+        """Submit the solution by filling in all non-zero values."""
         for row in range(self.info["height"]):
             for col in range(self.info["width"]):
                 cell = self.cells[row][col]
@@ -128,25 +138,32 @@ class TableSubmitter(SubmitterBase):
                 self.submit_val(cell, value)
                 
 class WallsSubmitter(SubmitterBase):
-    def extract(self,offset=0):
+    def extract(self, offset=0):
+        """Extract horizontal and vertical wall cells."""
         super().extract(offset)
         self.horizontal_walls = []
         self.vertical_walls = []
-        for wallx in range(self.info["height"]):
+        
+        # Extract horizontal walls
+        for row in range(self.info["height"]):
             hwalls_row = []
-            for wally in range(self.info["width"] - 1):
-                index = wallx * (self.info["width"] - 1) + wally + offset
+            for col in range(self.info["width"] - 1):
+                index = row * (self.info["width"] - 1) + col + offset
                 hwalls_row.append(self.all_cells[index])
             self.horizontal_walls.append(hwalls_row)
-        offset = self.info["height"] * (self.info["width"] - 1)
-        for wallx in range(self.info["height"] - 1):
+        
+        # Extract vertical walls
+        vertical_offset = self.info["height"] * (self.info["width"] - 1) + offset
+        for row in range(self.info["height"] - 1):
             vwalls_row = []
-            for wally in range(self.info["width"]):
-                index = offset + wallx * self.info["width"] + wally + offset
+            for col in range(self.info["width"]):
+                index = vertical_offset + row * self.info["width"] + col
                 vwalls_row.append(self.all_cells[index])
             self.vertical_walls.append(vwalls_row)
     
     def submit(self, solution):
+        """Submit horizontal and vertical wall solutions."""
+        # Submit horizontal walls
         for row in range(self.info["height"]):
             for col in range(self.info["width"] - 1):
                 cell = self.horizontal_walls[row][col]
@@ -154,6 +171,8 @@ class WallsSubmitter(SubmitterBase):
                 if value == 0:
                     continue  # Skip no-wall cells
                 self.submit_val(cell, value)
+        
+        # Submit vertical walls
         for row in range(self.info["height"] - 1):
             for col in range(self.info["width"]):
                 cell = self.vertical_walls[row][col]
@@ -163,11 +182,13 @@ class WallsSubmitter(SubmitterBase):
                 self.submit_val(cell, value)
 
 class WallsAndTablesSubmitter(TableSubmitter, WallsSubmitter):
-    def extract(self):
-        TableSubmitter.extract(self,0)
-        offset = self.info["height"] * self.info["width"]
-        WallsSubmitter.extract(self,offset)
+    def extract(self, offset=0):
+        """Extract both table cells and wall cells."""
+        TableSubmitter.extract(self, 0)
+        walls_offset = self.info["height"] * self.info["width"]
+        WallsSubmitter.extract(self, walls_offset)
 
     def submit(self, solution):
+        """Submit both table and wall solutions."""
         TableSubmitter.submit(self, solution["table"])
         WallsSubmitter.submit(self, solution)

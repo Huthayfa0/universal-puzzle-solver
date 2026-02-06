@@ -5,20 +5,47 @@ from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from threading import Event
 from itertools import chain
 
+
 class NonogramsSolver(BaseSolver):
+    """Solver for Nonograms (Picross) puzzles.
+    
+    Nonograms require filling cells to match row and column clues indicating
+    consecutive filled blocks. Uses advanced constraint propagation and backtracking.
+    """
+    
     def __init__(self, info):
+        """Initialize the Nonograms solver.
+        
+        Args:
+            info: Dictionary containing:
+                - horizontal_borders: Row clues (lists of block lengths)
+                - vertical_borders: Column clues (lists of block lengths)
+                - height, width: Puzzle dimensions
+        """
         super().__init__(info)
         self.row_info = self.info["horizontal_borders"]
         self.col_info = self.info["vertical_borders"]
         self.height = self.info["height"]
         self.width = self.info["width"]
         self.board = [[0 for _ in range(self.width)] for _ in range(self.height)]
-        self.clues_order = []
-        self.first_possible_value_line_cache = {}
+        self.clues_order = []  # Order for processing clues
+        self.first_possible_value_line_cache = {}  # Cache for line solving
 
-    def possible_values_expected_heuristic(self,clues, length):
+    def possible_values_expected_heuristic(self, clues, length):
+        """Calculate the expected number of possible line configurations.
+        
+        Used as a heuristic to estimate search space size.
+        
+        Args:
+            clues: List of block lengths
+            length: Line length
+        
+        Returns:
+            Estimated number of configurations.
+        """
         if not clues:
-            return 1  # all empty
+            return 1  # All empty
+        
         free = length - (sum(clues) + len(clues) - 1)
         if free < 0:
             return 0
@@ -109,12 +136,20 @@ class NonogramsSolver(BaseSolver):
 
         return results
 
-    def decode(self,arr):
-        v=1
-        s=0
+    def decode(self, arr):
+        """Decode a line state array into a cache key.
+        
+        Args:
+            arr: Line state array (0=unknown, 1=filled, 2=empty)
+        
+        Returns:
+            Integer cache key.
+        """
+        v = 1
+        s = 0
         for x in arr:
-            s+=x*v
-            v*=3 
+            s += x * v
+            v *= 3
         return s
 
     def first_possible_value_line(self, arr, val, index=0):
@@ -175,8 +210,7 @@ class NonogramsSolver(BaseSolver):
                     return None
             else:
                 return None   
-        cache_key=(0)
-        cache_key =(len(arr)-index,self.decode(arr[index:]),*val)
+        cache_key = (len(arr) - index, self.decode(arr[index:]), *val)
 
         if cache_key in self.first_possible_value_line_cache:
             if self.first_possible_value_line_cache[cache_key] is None:
@@ -345,80 +379,111 @@ class NonogramsSolver(BaseSolver):
         return updated
     
     def solve_puzzle(self):
+        """Solve using constraint propagation and backtracking with clue ordering.
+        
+        Returns:
+            True if puzzle is solved, False otherwise.
+        """
         s = self.submit_common()
         while s > 0:
-            print("Solving common:",s)
             s = self.submit_common()
-        board_copy =[[]]*(self.height+self.width)
-        diff = 1000
-        cached = [0]*(self.height+self.width)
-        processed_cache = [0]*(self.height+self.width)
-        possible_vals_db= [[]]*(self.height+self.width)
+        
+        # Backtracking state
+        board_copy = [[]] * (self.height + self.width)
+        diff = 1000  # Batch size for possible values
+        cached = [0] * (self.height + self.width)
+        processed_cache = [0] * (self.height + self.width)
+        possible_vals_db = [[]] * (self.height + self.width)
+        
         clue_idx = 0
         while clue_idx < self.height + self.width:
             cell_idx = self.clues_order[clue_idx]
-            clue = self.row_info[cell_idx[0]] if cell_idx[1]=="row" else self.col_info[cell_idx[0]]
-            clue_len = self.width if cell_idx[1]=="row" else self.height
-            line = self.board[cell_idx[0]] if cell_idx[1]=="row" else [a[cell_idx[0]] for a in self.board]
-            if processed_cache[clue_idx]>=self.possible_values_expected_heuristic(clue,clue_len):
-                processed_cache[clue_idx]=0
-                cached[clue_idx]=0
-                possible_vals_db[clue_idx]=[]
-                board_copy[clue_idx]=[]
-                clue_idx-=1
+            clue = self.row_info[cell_idx[0]] if cell_idx[1] == "row" else self.col_info[cell_idx[0]]
+            clue_len = self.width if cell_idx[1] == "row" else self.height
+            line = self.board[cell_idx[0]] if cell_idx[1] == "row" else [a[cell_idx[0]] for a in self.board]
+            
+            # Backtrack if we've exhausted all possibilities for this clue
+            if processed_cache[clue_idx] >= self.possible_values_expected_heuristic(clue, clue_len):
+                processed_cache[clue_idx] = 0
+                cached[clue_idx] = 0
+                possible_vals_db[clue_idx] = []
+                board_copy[clue_idx] = []
+                clue_idx -= 1
                 while not board_copy[clue_idx]:
-                    clue_idx-=1
-                    
-                self.board=board_copy[clue_idx]
-                print("Back tracking clue:", cell_idx, "to clue:",clue_idx)
+                    clue_idx -= 1
+                self.board = board_copy[clue_idx]
                 continue
-            if all(x!=0 for x in line):
-                clue_idx+=1
+            
+            # Skip if line is already complete
+            if all(x != 0 for x in line):
+                clue_idx += 1
                 continue
-            if cached[clue_idx]<=processed_cache[clue_idx] or not possible_vals_db[clue_idx]:
-                possible_vals_db[clue_idx]= self.possible_values_line_with_heur(line,clue,0,cached[clue_idx],cached[clue_idx]+diff)
-                cached[clue_idx]+=diff
-            if processed_cache[clue_idx] % diff >=len(possible_vals_db[clue_idx]):
-                processed_cache[clue_idx]=cached[clue_idx]
+            
+            # Load possible values if needed
+            if cached[clue_idx] <= processed_cache[clue_idx] or not possible_vals_db[clue_idx]:
+                possible_vals_db[clue_idx] = self.possible_values_line_with_heur(
+                    line, clue, 0, cached[clue_idx], cached[clue_idx] + diff
+                )
+                cached[clue_idx] += diff
+            
+            # Check if we've exhausted current batch
+            if processed_cache[clue_idx] % diff >= len(possible_vals_db[clue_idx]):
+                processed_cache[clue_idx] = cached[clue_idx]
                 continue
-            print("Trying value for clue:",clue_idx,cell_idx,"heuristic:",processed_cache[clue_idx])
+            
+            # Try next possible value
             board_copy[clue_idx] = deepcopy(self.board)
-            if cell_idx[1]=="row":
+            if cell_idx[1] == "row":
                 self.board[cell_idx[0]] = possible_vals_db[clue_idx][processed_cache[clue_idx] % diff]
             else:
                 for i in range(len(self.board)):
                     self.board[i][cell_idx[0]] = possible_vals_db[clue_idx][processed_cache[clue_idx] % diff][i]
 
-            processed_cache[clue_idx]+=1
+            processed_cache[clue_idx] += 1
             s = self.submit_common()
             while s > 0:
-                print("Solving common:",s)
                 s = self.submit_common()
-            if s!=-1:
+            
+            if s != -1:
                 clue_idx += 1
             else:
-                self.board=board_copy[clue_idx]
+                self.board = board_copy[clue_idx]
+        
         return self.is_valid()
     def solve(self):
+        """Solve the Nonograms puzzle.
+        
+        Builds a processing order for clues (alternating rows and columns from edges),
+        then solves using constraint propagation and backtracking.
+        
+        Returns:
+            2D list representing the solved puzzle board.
+        """
         self.clues_order = []
         rL, rR = 0, self.height
         cL, cR = 0, self.width
+        
+        # Build clue processing order: process edges first
         while rL < rR or cL < cR:
-            for i in range(rL, min(rL+3, rR)):
+            # Process 3 rows from left
+            for i in range(rL, min(rL + 3, rR)):
                 self.clues_order.append((i, 'row'))
             rL += 3
-            for i in range(rR-1, max(rR-4, rL-1), -1):
+            
+            # Process 3 rows from right
+            for i in range(rR - 1, max(rR - 4, rL - 1), -1):
                 self.clues_order.append((i, 'row'))
             rR -= 3
-            for j in range(cL, min(cL+3, cR)):
+            
+            # Process 3 columns from top
+            for j in range(cL, min(cL + 3, cR)):
                 self.clues_order.append((j, 'col'))
             cL += 3
-            for j in range(cR-1, max(cR-4, cL-1), -1):
+            
+            # Process 3 columns from bottom
+            for j in range(cR - 1, max(cR - 4, cL - 1), -1):
                 self.clues_order.append((j, 'col'))
             cR -= 3
         
-        # self.clues_order.extend(tmp_que)
-                #found a value col check if the value is 0 or self.height -1 or if tmp_arr[val-1]==1 or tmp_arr[val+1]==1 then accept, else move until any value of those becomes 1
         self.solve_puzzle()
-        print(self.board)
         return self.board
