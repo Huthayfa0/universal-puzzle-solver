@@ -49,6 +49,7 @@ def main():
     parser.add_argument("--quest_mode", action="store_true", help="Enable quest mode.")
     parser.add_argument("--test_mode", action="store_true", help="Enable test mode.")
     parser.add_argument("--ignore_empty", action="store_true", help="Ignore x values.")
+    parser.add_argument("--no_progress", action="store_true", help="Disable progress updates during solving.")
     
     args = parser.parse_args()
     
@@ -63,10 +64,11 @@ def main():
         raise SystemExit(1) from e
     
     try:
+        show_progress = not args.no_progress
         if args.quest_mode and not args.test_mode:
-            run_quest_mode(driver)
+            run_quest_mode(driver, show_progress=show_progress)
         else:
-            run_solver(driver, test_mode=args.test_mode, ignore_empty=args.ignore_empty)
+            run_solver(driver, test_mode=args.test_mode, ignore_empty=args.ignore_empty, show_progress=show_progress)
     except (PuzzlePageError, SystemExit):
         # Already handled, just re-raise
         raise
@@ -75,11 +77,12 @@ def main():
         print("Please check that you're on a valid puzzle page and try again.")
         raise SystemExit(1) from e
 
-def run_quest_mode(driver):
+def run_quest_mode(driver, show_progress=True):
     """Run the solver in quest mode, continuously solving puzzles.
     
     Args:
         driver: Selenium WebDriver instance.
+        show_progress: If True, show progress updates during solving.
     
     Raises:
         PuzzlePageError: If the current page is not a valid puzzle page.
@@ -97,7 +100,7 @@ def run_quest_mode(driver):
     
     while True:
         try:
-            run_solver(driver, test_mode=False, ignore_empty=False)
+            run_solver(driver, test_mode=False, ignore_empty=False, show_progress=show_progress)
         except PuzzlePageError as e:
             print(f"\n❌ Error in quest mode: {e}")
             print("Quest mode stopped. Please navigate to a puzzle page and try again.")
@@ -283,8 +286,16 @@ def apply_puzzle_specific_config(info):
         info["killer_x"] = info["type"] in ["daily", "monthly"]
 
 
-def create_solver(info):
-    """Create the appropriate solver for the puzzle type."""
+def create_solver(info, show_progress=True):
+    """Create the appropriate solver for the puzzle type.
+    
+    Args:
+        info: Dictionary containing puzzle information.
+        show_progress: If True, show progress updates during solving.
+    
+    Returns:
+        Solver instance for the puzzle type.
+    """
     solvers = {
         "sudoku": sudoku_solver.SudokuSolver,
         "kakurasu": kakurasu_solver.KakurasuSolver,
@@ -301,7 +312,7 @@ def create_solver(info):
     if puzzle_type not in solvers:
         raise NotImplementedError(f"Solver for puzzle type '{puzzle_type}' is not implemented.")
     
-    return solvers[puzzle_type](info)
+    return solvers[puzzle_type](info, show_progress=show_progress)
 
 
 def calculate_submission_offset(info):
@@ -330,13 +341,14 @@ def apply_ignore_empty_filter(info, ignore_empty):
                     info["solution"][i][j] = 0
 
 
-def run_solver(driver, test_mode=False, ignore_empty=False):
+def run_solver(driver, test_mode=False, ignore_empty=False, show_progress=True):
     """Main solver workflow: extract, parse, solve, and submit puzzle.
     
     Args:
         driver: Selenium WebDriver instance.
         test_mode: If True, don't save statistics.
         ignore_empty: If True, ignore empty cell markings for certain puzzles.
+        show_progress: If True, show progress updates every 10 seconds during solving.
     
     Raises:
         PuzzlePageError: If the current page is not a valid puzzle page.
@@ -370,7 +382,9 @@ def run_solver(driver, test_mode=False, ignore_empty=False):
     apply_puzzle_specific_config(info)
     
     # Step 5: Solve puzzle
-    solver = create_solver(info)
+    if show_progress:
+        print("Solving puzzle (progress updates every 10 seconds)...")
+    solver = create_solver(info, show_progress=show_progress)
     
     start_time = time.time()
     info["solution"] = solver.solve()

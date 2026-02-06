@@ -8,7 +8,7 @@ class KillerSudokuSolver(SudokuSolver):
     and optionally diagonal constraints (X variant).
     """
     
-    def __init__(self, info):
+    def __init__(self, info, show_progress=True):
         """Initialize the Killer Sudoku solver.
         
         Args:
@@ -17,8 +17,9 @@ class KillerSudokuSolver(SudokuSolver):
                 - boxes_table/boxes_table_2: Cage ID for each cell
                 - table_2: Cage target sums
                 - killer_x: Whether diagonal constraints apply
+            show_progress: If True, show progress updates during solving.
         """
-        super().__init__(info)
+        super().__init__(info, show_progress=show_progress)
         self.trim_is_overkill = False
         
         # Use different box sets for regular vs irregular subtable types

@@ -9,14 +9,15 @@ class RenzokuSolver(SudokuSolver):
     (marked with dots) or differ by more than 1 (no dot).
     """
     
-    def __init__(self, info):
+    def __init__(self, info, show_progress=True):
         """Initialize the Renzoku solver.
         
         Args:
             info: Dictionary containing puzzle information including:
                 - cell_info_table: Adjacency constraints (directions with dots)
+            show_progress: If True, show progress updates during solving.
         """
-        super().__init__(info)
+        super().__init__(info, show_progress=show_progress)
         self.trim_is_overkill = False
         self.adj_dot = [[] for _ in range(self.height)]
         self.adj_ndot = [[] for _ in range(self.height)]

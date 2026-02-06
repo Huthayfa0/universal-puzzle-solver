@@ -13,7 +13,7 @@ class NonogramsSolver(BaseSolver):
     consecutive filled blocks. Uses advanced constraint propagation and backtracking.
     """
     
-    def __init__(self, info):
+    def __init__(self, info, show_progress=True):
         """Initialize the Nonograms solver.
         
         Args:
@@ -21,8 +21,9 @@ class NonogramsSolver(BaseSolver):
                 - horizontal_borders: Row clues (lists of block lengths)
                 - vertical_borders: Column clues (lists of block lengths)
                 - height, width: Puzzle dimensions
+            show_progress: If True, show progress updates during solving.
         """
-        super().__init__(info)
+        super().__init__(info, show_progress=show_progress)
         self.row_info = self.info["horizontal_borders"]
         self.col_info = self.info["vertical_borders"]
         self.height = self.info["height"]
@@ -395,6 +396,7 @@ class NonogramsSolver(BaseSolver):
         processed_cache = [0] * (self.height + self.width)
         possible_vals_db = [[]] * (self.height + self.width)
         
+        total_clues = len(self.clues_order)
         clue_idx = 0
         while clue_idx < self.height + self.width:
             cell_idx = self.clues_order[clue_idx]
@@ -413,6 +415,15 @@ class NonogramsSolver(BaseSolver):
                     clue_idx -= 1
                 self.board = board_copy[clue_idx]
                 continue
+            
+            # Update progress
+            self._update_progress(
+                clue_idx=clue_idx,
+                total_clues=total_clues,
+                clue_type=cell_idx[1] if clue_idx < len(self.clues_order) else "",
+                cells_filled=sum(1 for row in self.board for cell in row if cell != 0),
+                total_cells=self.height * self.width
+            )
             
             # Skip if line is already complete
             if all(x != 0 for x in line):
@@ -459,6 +470,8 @@ class NonogramsSolver(BaseSolver):
         Returns:
             2D list representing the solved puzzle board.
         """
+        self._start_progress_tracking()
+        
         self.clues_order = []
         rL, rR = 0, self.height
         cL, cR = 0, self.width
@@ -485,5 +498,9 @@ class NonogramsSolver(BaseSolver):
                 self.clues_order.append((j, 'col'))
             cR -= 3
         
-        self.solve_puzzle()
+        try:
+            self.solve_puzzle()
+        finally:
+            self._stop_progress_tracking()
+        
         return self.board

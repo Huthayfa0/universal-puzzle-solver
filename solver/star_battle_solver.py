@@ -11,7 +11,7 @@ class StarBattleSolver(BaseSolver):
     - Stars cannot be adjacent (including diagonally)
     """
     
-    def __init__(self, info):
+    def __init__(self, info, show_progress=True):
         """Initialize the Star Battle solver.
         
         Args:
@@ -19,8 +19,9 @@ class StarBattleSolver(BaseSolver):
                 - boxes: List of box cell coordinates
                 - boxes_table: Box ID for each cell
                 - items_per_box: Number of stars per box/row/column
+            show_progress: If True, show progress updates during solving.
         """
-        super().__init__(info)
+        super().__init__(info, show_progress=show_progress)
         self.boxes = info["boxes"]
         self.boxes_table = self.info["boxes_table"]
         self.stars = self.info["items_per_box"]
@@ -331,9 +332,81 @@ class StarBattleSolver(BaseSolver):
     # ---------------------------
 
     def solve(self):
-        self.cells_order = [(i,j) for i in range(self.height) for j in range(self.width)]
+        """Solve the Star Battle puzzle.
         
-        self.cells_order = sorted(self.cells_order,key=lambda x:sum(self.board[v[0]][v[1]]==0 for v in self.boxes[self.boxes_table[x[0]][x[1]]]))
-        if self.solve_puzzle():
+        Returns:
+            2D list representing the solved puzzle board, or None if unsolvable.
+        """
+        self._start_progress_tracking()
+        
+        self.cells_order = [(i, j) for i in range(self.height) for j in range(self.width)]
+        self.cells_order = sorted(
+            self.cells_order,
+            key=lambda x: sum(self.board[v[0]][v[1]] == 0 for v in self.boxes[self.boxes_table[x[0]][x[1]]])
+        )
+        
+        total_cells = len(self.cells_order)
+        backtrack_count = [0]
+        
+        def solve_puzzle_with_progress(cell_idx=0):
+            """Wrapper to add progress tracking to solve_puzzle."""
+            if cell_idx == self.height * self.width:
+                return self.is_complete()
+            
+            # Update progress
+            cells_filled = sum(1 for row in self.board for cell in row if cell != 0)
+            self._update_progress(
+                cell_idx=cell_idx,
+                total_cells=total_cells,
+                cells_filled=cells_filled,
+                current_cell=self.cells_order[cell_idx] if cell_idx < len(self.cells_order) else None,
+                backtrack_count=backtrack_count[0]
+            )
+            
+            i, j = self.cells_order[cell_idx]
+            if self.board[i][j] != 0:
+                return solve_puzzle_with_progress(cell_idx + 1)
+            if not self.all_boxes_feasible():
+                backtrack_count[0] += 1
+                return False
+            if not self.fill_all_boxes():
+                backtrack_count[0] += 1
+                return False
+            if self.board[i][j] != 0:
+                return solve_puzzle_with_progress(cell_idx + 1)
+            self.cells_order[cell_idx:] = sorted(
+                self.cells_order[cell_idx:],
+                key=lambda x: sum(self.board[v[0]][v[1]] == 0 for v in self.boxes[self.boxes_table[x[0]][x[1]]])
+            )
+            
+            # Try placing a star
+            board_save = deepcopy(self.board)
+            if self.can_place_star(i, j):
+                self.board[i][j] = 2
+                # Mark adjacent cells as empty (cannot have stars)
+                for di in (-1, 0, 1):
+                    for dj in (-1, 0, 1):
+                        if di == 0 and dj == 0:
+                            continue
+                        ni, nj = i + di, j + dj
+                        if 0 <= ni < self.height and 0 <= nj < self.width:
+                            self.board[ni][nj] = 1
+                if solve_puzzle_with_progress(cell_idx + 1):
+                    return True
+                self.board = board_save
+                backtrack_count[0] += 1
+
+            # If we can't place a star, must place empty
+            if self.cant_place_empty(i, j):
+                return False
+            self.board[i][j] = 1
+            return solve_puzzle_with_progress(cell_idx + 1)
+        
+        try:
+            result = solve_puzzle_with_progress()
+        finally:
+            self._stop_progress_tracking()
+        
+        if result:
             return self.board
         return None

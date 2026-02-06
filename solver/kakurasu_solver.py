@@ -8,7 +8,7 @@ class KakurasuSolver(BaseSolver):
     Each cell's value is its position number (1-indexed) if filled, or 0 if empty.
     """
     
-    def __init__(self, info):
+    def __init__(self, info, show_progress=True):
         """Initialize the Kakurasu solver.
         
         Args:
@@ -16,8 +16,9 @@ class KakurasuSolver(BaseSolver):
                 - horizontal_borders: Target sums for each row
                 - vertical_borders: Target sums for each column
                 - height, width: Puzzle dimensions
+            show_progress: If True, show progress updates during solving.
         """
-        super().__init__(info)
+        super().__init__(info, show_progress=show_progress)
         self.row_info = self.info["horizontal_borders"]
         self.col_info = self.info["vertical_borders"]
         self.height = self.info["height"]

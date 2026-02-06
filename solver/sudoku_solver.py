@@ -9,7 +9,7 @@ class SudokuSolver(BaseSolver):
     naked subsets and box/row/column elimination.
     """
     
-    def __init__(self, info):
+    def __init__(self, info, show_progress=True):
         """Initialize the Sudoku solver.
         
         Args:
@@ -18,8 +18,9 @@ class SudokuSolver(BaseSolver):
                 - subtable_type: "regular" or "irregular"
                 - subtable_height, subtable_width: For regular sudoku
                 - boxes, boxes_table: For irregular/jigsaw sudoku
+            show_progress: If True, show progress updates during solving.
         """
-        super().__init__(info)
+        super().__init__(info, show_progress=show_progress)
         self.board = info.get("table", [[0 for _ in range(self.width)] 
                                         for _ in range(self.height)])
         self.possible_values_cache = {}
@@ -361,6 +362,10 @@ class SudokuSolver(BaseSolver):
         Returns:
             2D list representing the solved puzzle board.
         """
+        self._start_progress_tracking()
+        total_cells = len(self.cells_to_fill)
+        backtrack_count = [0]  # Use list to allow modification in nested function
+        
         def solve_sudoku(cell_idx=0):
             """Recursive backtracking solver with constraint propagation.
             
@@ -372,6 +377,16 @@ class SudokuSolver(BaseSolver):
             """
             if cell_idx >= len(self.cells_to_fill):
                 return True
+            
+            # Update progress
+            cells_filled = sum(1 for i, j in self.cells_to_fill[:cell_idx] if self.board[i][j] != 0)
+            self._update_progress(
+                cell_idx=cell_idx,
+                total_cells=total_cells,
+                cells_filled=cells_filled,
+                current_cell=self.cells_to_fill[cell_idx] if cell_idx < len(self.cells_to_fill) else None,
+                backtrack_count=backtrack_count[0]
+            )
             
             # Clear cache and recalculate possible values
             self.possible_values_cache.clear()
@@ -404,9 +419,14 @@ class SudokuSolver(BaseSolver):
                     if solve_sudoku(cell_idx + 1):
                         return True
                     self.board[i][j] = 0  # Backtrack
+                    backtrack_count[0] += 1
             
             return False
 
-        solve_sudoku()
+        try:
+            solve_sudoku()
+        finally:
+            self._stop_progress_tracking()
+        
         return self.board
     

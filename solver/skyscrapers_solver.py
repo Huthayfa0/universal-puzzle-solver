@@ -9,8 +9,14 @@ class SkyscrapersSolver(SudokuSolver):
     Skyscrapers adds clues indicating how many buildings are visible
     from each side of the grid.
     """
-    def __init__(self, info):
-        super().__init__(info)
+    def __init__(self, info, show_progress=True):
+        """Initialize the Skyscrapers solver.
+        
+        Args:
+            info: Dictionary containing puzzle information.
+            show_progress: If True, show progress updates during solving.
+        """
+        super().__init__(info, show_progress=show_progress)
         self.upper_clues = self.info["vertical_borders"][:self.width]
         self.lower_clues = self.info["vertical_borders"][self.width:]
         self.left_clues  = self.info["horizontal_borders"][:self.height]
