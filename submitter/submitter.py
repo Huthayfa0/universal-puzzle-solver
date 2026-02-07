@@ -1,11 +1,14 @@
 import random
+import time
 from time import sleep
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import (
     ElementClickInterceptedException,
     ElementNotInteractableException,
+    NoAlertPresentException,
 )
 
 
@@ -94,11 +97,97 @@ class SubmitterBase:
     def __init__(self, driver, info=None, offset=0):
         self.driver = driver
         self.info = info if info is not None else {}
+        self.offset = offset  # Store offset for re-extraction after clear_grid
         self.extract(offset)
 
     def extract(self, offset=0):
         """Extract all selectable cells from the page."""
         self.all_cells = self.driver.find_elements(By.CSS_SELECTOR, ".selectable")
+    
+    def clear_grid(self):
+        """Clear the grid by using the restart functionality.
+        
+        Note: After clearing, cell elements become stale and need to be re-extracted.
+        Call extract() after clear_grid() if you plan to use the cells afterward.
+        """
+        # Try to find restart button
+        restart_button = self.driver.find_elements(By.CSS_SELECTOR, "puzzle-button[caption='Restart']")
+        if not restart_button:
+            # Open menu if restart button is not visible
+            menu = self.driver.find_elements(By.ID, "additional-menu")
+            if menu:
+                smart_click(self.driver, menu[0])
+                time.sleep(0.5)
+        
+        # Click restart button
+        restart_button = self.driver.find_elements(By.CSS_SELECTOR, "puzzle-button[caption='Restart']")
+        if restart_button:
+            smart_click(self.driver, restart_button[0])
+            time.sleep(0.5)
+        
+        # Handle the alert dialog if it appears
+        try:
+            alert = self.driver.switch_to.alert
+            alert.accept()  # Accept the "Start over?" confirmation
+            time.sleep(0.5)
+        except NoAlertPresentException:
+            # No alert appeared, try pressing ENTER as fallback
+            actions = ActionChains(self.driver)
+            actions.send_keys(Keys.ENTER).perform()
+            time.sleep(0.5)
+        
+        # Close menu if it's open
+        menu = self.driver.find_elements(By.ID, "additional-menu")
+        if menu:
+            smart_click(self.driver, menu[0])
+            time.sleep(0.5)
+        
+        # Wait a bit for the page to stabilize after restart
+        time.sleep(0.5)
+        
+        # Re-extract cells after restart (they become stale)
+        self.extract(self.offset)
+    
+    def check_puzzle_solved(self):
+        """Check if puzzle is solved and click the check button if needed."""
+        if self.driver.find_elements(By.CSS_SELECTOR, ".new-puzzle"):
+            return  # Puzzle already solved
+        
+        check_button = self.driver.find_elements(By.CSS_SELECTOR, "puzzle-button[caption='Check']")
+        if not check_button:
+            menu = self.driver.find_elements(By.ID, "additional-menu")
+            if menu:
+                smart_click(self.driver, menu[0])
+                time.sleep(0.5)
+        
+        check_button = self.driver.find_elements(By.CSS_SELECTOR, "puzzle-button[caption='Check']")
+        if check_button:
+            smart_click(self.driver, check_button[0])
+            time.sleep(0.5)
+        
+        menu = self.driver.find_elements(By.ID, "additional-menu")
+        if menu:
+            smart_click(self.driver, menu[0])
+    
+    def open_new_puzzle(self, wait_short=0.1, wait_medium=0.5, wait_long=1.0):
+        """Open a new puzzle after the current one is solved.
+        
+        Args:
+            wait_short: Short delay in seconds (default: 0.1).
+            wait_medium: Medium delay in seconds (default: 0.5).
+            wait_long: Long delay in seconds (default: 1.0).
+        """
+        time.sleep(wait_medium)
+        self.check_puzzle_solved()
+        time.sleep(wait_medium)
+        
+        new_puzzle = []
+        while new_puzzle == []:
+            new_puzzle = self.driver.find_elements(By.CSS_SELECTOR, ".new-puzzle")
+            time.sleep(wait_short)
+        
+        new_puzzle[0].click()
+        time.sleep(wait_long)
         
     def submit(self, solution):
         """Submit the solution to the puzzle. Must be overridden by subclasses."""

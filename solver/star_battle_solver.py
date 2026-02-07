@@ -11,7 +11,7 @@ class StarBattleSolver(BaseSolver):
     - Stars cannot be adjacent (including diagonally)
     """
     
-    def __init__(self, info, show_progress=True):
+    def __init__(self, info, show_progress=True, partial_solution_callback=None, progress_interval=10.0, partial_interval=100.0):
         """Initialize the Star Battle solver.
         
         Args:
@@ -20,8 +20,12 @@ class StarBattleSolver(BaseSolver):
                 - boxes_table: Box ID for each cell
                 - items_per_box: Number of stars per box/row/column
             show_progress: If True, show progress updates during solving.
+            partial_solution_callback: Optional callback to display partial solution.
+            progress_interval: Interval in seconds for progress updates (default: 10.0).
+            partial_interval: Interval in seconds for partial solution display (default: 100.0).
         """
-        super().__init__(info, show_progress=show_progress)
+        super().__init__(info, show_progress=show_progress, partial_solution_callback=partial_solution_callback,
+                        progress_interval=progress_interval, partial_interval=partial_interval)
         self.boxes = info["boxes"]
         self.boxes_table = self.info["boxes_table"]
         self.stars = self.info["items_per_box"]
@@ -96,43 +100,220 @@ class StarBattleSolver(BaseSolver):
                 last = p
 
         return count
-    def max_non_adjacent_2d(self, cells):
-        cells = set(cells)
-        used = set()
-        count = 0
 
-        for i, j in cells:
-            if (i, j) in used:
+    def can_fit(self,cells, stars):
+        """
+        Return True iff it's possible to choose >= `stars` cells from `cells`
+        such that no two are 8-neighbors. `cells` is an iterable of (r,c).
+        Optimized for many repeated calls and small graphs (<= ~50 nodes).
+        """
+        # normalize & trivial checks
+        cells = list(dict.fromkeys(cells))
+        n = len(cells)
+        if stars <= 0:
+            return True
+        if n < stars:
+            return False
+        if stars == 1:
+            return True  # at least one node exists
+
+        # index and 8-neighbor adjacency bitmasks
+        idx = {c: i for i, c in enumerate(cells)}
+        adj = [0] * n
+        for i, (r, c) in enumerate(cells):
+            m = 0
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    if dr == 0 and dc == 0:
+                        continue
+                    j = idx.get((r + dr, c + dc))
+                    if j is not None:
+                        m |= 1 << j
+            adj[i] = m
+        full = (1 << n) - 1
+
+        # ---------- cheap lower bound (greedy). If LB >= stars -> True ----------
+        def greedy_lb():
+            alive = full
+            chosen = 0
+            # choose min-degree vertices repeatedly
+            while alive:
+                best_v = None
+                best_deg = 10**9
+                mm = alive
+                while mm:
+                    v = (mm & -mm).bit_length() - 1
+                    mm &= mm - 1
+                    deg = (adj[v] & alive).bit_count()
+                    if deg < best_deg:
+                        best_deg = deg
+                        best_v = v
+                        if best_deg == 0:
+                            break
+                chosen += 1
+                if chosen >= stars:
+                    return chosen
+                alive &= ~(1 << best_v)
+                alive &= ~adj[best_v]
+            return chosen
+
+        if greedy_lb() >= stars:
+            return True
+
+        # ---------- cheap upper bound: 2x2 tiling (min over 4 shifts). If UB < stars -> False ----------
+        def ub_2x2():
+            best = n
+            for sx in (0, 1):
+                for sy in (0, 1):
+                    used = set()
+                    for (r, c) in cells:
+                        used.add(((r - sx) // 2, (c - sy) // 2))
+                    if len(used) < best:
+                        best = len(used)
+            return best
+
+        if ub_2x2() < stars:
+            return False
+
+        # ---------- cheap upper bound: greedy matching -> UB = n - matching_size ----------
+        def greedy_matching():
+            used = 0
+            pairs = 0
+            order = sorted(range(n), key=lambda v: -(adj[v].bit_count()))
+            for v in order:
+                if used & (1 << v):
+                    continue
+                mm = adj[v] & ~used
+                if mm:
+                    u = (mm & -mm).bit_length() - 1
+                    used |= (1 << v) | (1 << u)
+                    pairs += 1
+            return pairs
+
+        if n - greedy_matching() < stars:
+            return False
+
+        # ---------- split into connected components (on original graph) ----------
+        seen = 0
+        comps = []
+        for i in range(n):
+            if seen & (1 << i):
+                continue
+            stack = [i]
+            comp_mask = 0
+            seen |= (1 << i)
+            comp_mask |= (1 << i)
+            while stack:
+                u = stack.pop()
+                nbrs = adj[u] | (1 << u)
+                mm = nbrs
+                while mm:
+                    v = (mm & -mm).bit_length() - 1
+                    mm &= mm - 1
+                    if not (seen & (1 << v)):
+                        seen |= (1 << v)
+                        stack.append(v)
+                        comp_mask |= (1 << v)
+            comps.append(comp_mask)
+
+        # ---------- solve components one by one, early exit when achieved stars ----------
+        total = 0
+        for comp in comps:
+            # if remaining required already satisfied
+            need = stars - total
+            if need <= 0:
+                return True
+
+            # if comp can't provide enough even in best case -> continue
+            comp_size = comp.bit_count()
+            if comp_size <= 0:
+                continue
+            if comp_size < need:
+                total += comp_size  # best case: all nodes (very loose), but skip deeper work
+                if total >= stars:
+                    return True
                 continue
 
-            # 4 possible 2x2 blocks containing (i,j)
-            blocks = []
-            for bi, bj in (
-                (i - 1, j - 1),
-                (i - 1, j),
-                (i, j - 1),
-                (i, j),
-            ):
-                block = {
-                    (bi + di, bj + dj)
-                    for di in (0, 1)
-                    for dj in (0, 1)
-                }
-                blocks.append(block)
+            # map local indices for component
+            verts = []
+            pos = {}
+            mm = comp
+            while mm:
+                v = (mm & -mm).bit_length() - 1
+                mm &= mm - 1
+                pos[v] = len(verts)
+                verts.append(v)
+            m = len(verts)
 
-            # choose block covering max remaining cells
-            best_block = max(
-                blocks,
-                key=lambda b: len((b & cells) - used)
-            )
+            # local adjacency
+            local_adj = [0] * m
+            for i, orig in enumerate(verts):
+                nb = adj[orig] & comp
+                mm2 = nb
+                mask = 0
+                while mm2:
+                    v = (mm2 & -mm2).bit_length() - 1
+                    mm2 &= mm2 - 1
+                    mask |= 1 << pos[v]
+                local_adj[i] = mask
 
-            if not ((best_block & cells) - used):
+            # remove isolated local vertices immediately (they always can be taken)
+            iso_count = 0
+            base_mask = (1 << m) - 1
+            for i in range(m):
+                if local_adj[i] == 0:
+                    iso_count += 1
+                    base_mask &= ~(1 << i)
+            if iso_count >= need:
+                return True
+            need -= iso_count
+            if need <= 0:
+                return True
+            if base_mask == 0:
+                total += iso_count
+                if total >= stars:
+                    return True
                 continue
 
-            count += 1
-            used |= best_block
+            # exact check on remaining local mask: does the component provide >= need?
+            from functools import lru_cache
+            @lru_cache(maxsize=None)
+            def dfs(mask):
+                # returns maximum independent set size for 'mask' (local indices)
+                if mask == 0:
+                    return 0
+                # quick upper bound: popcount(mask) (trivial)
+                if mask.bit_count() < 1:
+                    return 0
+                # pick branching vertex: one with largest degree in mask
+                mm = mask
+                best_v = None
+                best_deg = -1
+                while mm:
+                    v = (mm & -mm).bit_length() - 1
+                    mm &= mm - 1
+                    deg = (local_adj[v] & mask).bit_count()
+                    if deg > best_deg:
+                        best_deg = deg
+                        best_v = v
+                # take best_v
+                take_mask = mask & ~((1 << best_v) | local_adj[best_v])
+                take_res = 1 + dfs(take_mask)
+                # early pruning: if already large enough compared to need, can stop higher-level caller
+                if take_res >= need:
+                    return take_res
+                # skip best_v
+                skip_res = dfs(mask & ~(1 << best_v))
+                return take_res if take_res > skip_res else skip_res
 
-        return count
+            comp_best = dfs(base_mask) + iso_count
+            total += comp_best
+            if total >= stars:
+                return True
+            # small optimization: if even taking entire component doesn't reach needed, continue
+
+        return total >= stars
+
 
     
     def box_feasible(self, v):
@@ -145,7 +326,7 @@ class StarBattleSolver(BaseSolver):
             if self.board[i][j] == 0 and self.can_place_star(i, j)
         ]
 
-        return stars + self.max_non_adjacent_2d(candidates) >= self.stars
+        return self.can_fit(candidates,self.stars-stars)
     
     def fill_all_boxes(self):
         key=self.encode()
@@ -192,7 +373,7 @@ class StarBattleSolver(BaseSolver):
                     candidates.append((j,i+1))
             if stars > self.stars * 2:
                 return False
-            if stars + self.max_non_adjacent_2d(candidates) < self.stars *2:
+            if not self.can_fit(candidates,self.stars*2-stars):
                 return False
         for i in range(self.height-1):
             candidates = []
@@ -209,7 +390,7 @@ class StarBattleSolver(BaseSolver):
                     candidates.append((i+1,j))
             if stars > self.stars * 2:
                 return False
-            if stars + self.max_non_adjacent_2d(candidates) < self.stars *2:
+            if not self.can_fit(candidates,self.stars*2-stars):
                 return False   
         return True
     
@@ -266,7 +447,7 @@ class StarBattleSolver(BaseSolver):
             (ii, jj) for ii, jj in self.boxes[box]
             if (ii, jj) != (i, j) and self.board[ii][jj] == 0 and self.can_place_star(ii, jj)
         ]
-        if stars + self.max_non_adjacent_2d(candidates) < self.stars:
+        if not self.can_fit(candidates,self.stars-stars):
             return True
 
         return False
@@ -347,31 +528,67 @@ class StarBattleSolver(BaseSolver):
         
         total_cells = len(self.cells_order)
         backtrack_count = [0]
+        call_count = [0]  # Track number of recursive calls for periodic updates
+        
+        # Initial progress update
+        cells_filled = sum(1 for row in self.board for cell in row if cell != 0)
+        self._update_progress(
+            cell_idx=0,
+            total_cells=total_cells,
+            cells_filled=cells_filled,
+            current_cell=self.cells_order[0] if self.cells_order else None,
+            backtrack_count=0,
+            call_count=0
+        )
         
         def solve_puzzle_with_progress(cell_idx=0):
             """Wrapper to add progress tracking to solve_puzzle."""
             if cell_idx == self.height * self.width:
                 return self.is_complete()
             
-            # Update progress
+            i, j = self.cells_order[cell_idx]
+            
+            # Update progress on every call (timer will print every 10 seconds)
+            call_count[0] += 1
             cells_filled = sum(1 for row in self.board for cell in row if cell != 0)
             self._update_progress(
                 cell_idx=cell_idx,
                 total_cells=total_cells,
                 cells_filled=cells_filled,
-                current_cell=self.cells_order[cell_idx] if cell_idx < len(self.cells_order) else None,
-                backtrack_count=backtrack_count[0]
+                current_cell=(i, j),
+                backtrack_count=backtrack_count[0],
+                call_count=call_count[0]
             )
             
-            i, j = self.cells_order[cell_idx]
             if self.board[i][j] != 0:
                 return solve_puzzle_with_progress(cell_idx + 1)
+            
             if not self.all_boxes_feasible():
                 backtrack_count[0] += 1
+                cells_filled = sum(1 for row in self.board for cell in row if cell != 0)
+                self._update_progress(
+                    cell_idx=cell_idx,
+                    total_cells=total_cells,
+                    cells_filled=cells_filled,
+                    current_cell=(i, j),
+                    backtrack_count=backtrack_count[0],
+                    call_count=call_count[0]
+                )
                 return False
+            
             if not self.fill_all_boxes():
                 backtrack_count[0] += 1
+                cells_filled = sum(1 for row in self.board for cell in row if cell != 0)
+                self._update_progress(
+                    cell_idx=cell_idx,
+                    total_cells=total_cells,
+                    cells_filled=cells_filled,
+                    current_cell=(i, j),
+                    backtrack_count=backtrack_count[0],
+                    call_count=call_count[0]
+                )
                 return False
+            
             if self.board[i][j] != 0:
                 return solve_puzzle_with_progress(cell_idx + 1)
             self.cells_order[cell_idx:] = sorted(
@@ -391,15 +608,48 @@ class StarBattleSolver(BaseSolver):
                         ni, nj = i + di, j + dj
                         if 0 <= ni < self.height and 0 <= nj < self.width:
                             self.board[ni][nj] = 1
+                
+                # Update progress after placing star
+                cells_filled = sum(1 for row in self.board for cell in row if cell != 0)
+                self._update_progress(
+                    cell_idx=cell_idx,
+                    total_cells=total_cells,
+                    cells_filled=cells_filled,
+                    current_cell=(i, j),
+                    backtrack_count=backtrack_count[0],
+                    call_count=call_count[0]
+                )
+                
                 if solve_puzzle_with_progress(cell_idx + 1):
                     return True
                 self.board = board_save
                 backtrack_count[0] += 1
+                # Update progress after backtrack
+                cells_filled = sum(1 for row in self.board for cell in row if cell != 0)
+                self._update_progress(
+                    cell_idx=cell_idx,
+                    total_cells=total_cells,
+                    cells_filled=cells_filled,
+                    current_cell=(i, j),
+                    backtrack_count=backtrack_count[0],
+                    call_count=call_count[0]
+                )
 
             # If we can't place a star, must place empty
             if self.cant_place_empty(i, j):
                 return False
+            
             self.board[i][j] = 1
+            # Update progress after placing empty
+            cells_filled = sum(1 for row in self.board for cell in row if cell != 0)
+            self._update_progress(
+                cell_idx=cell_idx,
+                total_cells=total_cells,
+                cells_filled=cells_filled,
+                current_cell=(i, j),
+                backtrack_count=backtrack_count[0],
+                call_count=call_count[0]
+            )
             return solve_puzzle_with_progress(cell_idx + 1)
         
         try:

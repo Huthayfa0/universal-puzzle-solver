@@ -80,18 +80,32 @@ python main.py --quest_mode
 # Test mode - solve without saving statistics
 python main.py --test_mode
 
-# Ignore empty values - don't mark empty cells for certain puzzles
-python main.py --ignore_empty
+# Don't ignore empty values - mark empty cells for certain puzzles
+python main.py --no_ignore_empty
+
+# Debug mode - show progress updates and partial solution display
+python main.py --debug
+
+# Debug mode with custom intervals (progress every 5s, partial every 50s)
+python main.py --debug --progress_interval 5.0 --partial_interval 50.0
 
 # Combine options
-python main.py --quest_mode --ignore_empty
+python main.py --quest_mode --debug
+python main.py --quest_mode --debug --progress_interval 2.0 --partial_interval 30.0
 ```
 
 ### Options
 
 - `--quest_mode`: Enable quest mode to continuously solve puzzles
 - `--test_mode`: Enable test mode (doesn't save statistics)
-- `--ignore_empty`: Ignore marking empty cells (for nonograms, kakurasu, star-battle)
+- `--no_ignore_empty`: Don't ignore empty cell markings (default: empty cells are ignored for nonograms, kakurasu, star-battle)
+- `--debug`: Enable debug mode with progress updates and partial solution display
+  - Progress updates are printed every 10 seconds (default)
+  - Partial solutions are displayed every 100 seconds (default)
+- `--progress_interval SECONDS`: Set the interval for progress updates in seconds (default: 10.0)
+- `--partial_interval SECONDS`: Set the interval for partial solution display in seconds (default: 100.0)
+
+**Note**: Progress tracking and partial solution display are only enabled when `--debug` is specified. Without debug mode, the solver runs silently for maximum performance.
 
 ---
 

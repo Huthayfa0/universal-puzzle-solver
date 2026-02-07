@@ -13,7 +13,7 @@ class NonogramsSolver(BaseSolver):
     consecutive filled blocks. Uses advanced constraint propagation and backtracking.
     """
     
-    def __init__(self, info, show_progress=True):
+    def __init__(self, info, show_progress=True, partial_solution_callback=None, progress_interval=10.0, partial_interval=100.0):
         """Initialize the Nonograms solver.
         
         Args:
@@ -22,8 +22,12 @@ class NonogramsSolver(BaseSolver):
                 - vertical_borders: Column clues (lists of block lengths)
                 - height, width: Puzzle dimensions
             show_progress: If True, show progress updates during solving.
+            partial_solution_callback: Optional callback to display partial solution.
+            progress_interval: Interval in seconds for progress updates (default: 10.0).
+            partial_interval: Interval in seconds for partial solution display (default: 100.0).
         """
-        super().__init__(info, show_progress=show_progress)
+        super().__init__(info, show_progress=show_progress, partial_solution_callback=partial_solution_callback,
+                        progress_interval=progress_interval, partial_interval=partial_interval)
         self.row_info = self.info["horizontal_borders"]
         self.col_info = self.info["vertical_borders"]
         self.height = self.info["height"]

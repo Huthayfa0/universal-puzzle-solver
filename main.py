@@ -25,7 +25,7 @@ from solver import (
     skyscrapers_solver,
     killer_sudoku_solver,
 )
-from submitter.submitter import TableSubmitter, smart_click
+from submitter.submitter import TableSubmitter
 
 # Constants
 SUMMARY_FILE_PATH = "summary.json"
@@ -48,8 +48,10 @@ def main():
     )
     parser.add_argument("--quest_mode", action="store_true", help="Enable quest mode.")
     parser.add_argument("--test_mode", action="store_true", help="Enable test mode.")
-    parser.add_argument("--ignore_empty", action="store_true", help="Ignore x values.")
-    parser.add_argument("--no_progress", action="store_true", help="Disable progress updates during solving.")
+    parser.add_argument("--no_ignore_empty", action="store_true", help="Don't ignore empty cell markings (default: ignore empty cells).")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode (progress updates and partial solution display).")
+    parser.add_argument("--progress_interval", type=float, default=10.0, help="Interval in seconds for progress updates (default: 10.0).")
+    parser.add_argument("--partial_interval", type=float, default=100.0, help="Interval in seconds for partial solution display (default: 100.0).")
     
     args = parser.parse_args()
     
@@ -64,11 +66,17 @@ def main():
         raise SystemExit(1) from e
     
     try:
-        show_progress = not args.no_progress
+        debug_mode = args.debug  # Only show progress if debug mode is enabled
+        ignore_empty = not args.no_ignore_empty  # Default is True (ignore empty)
+        progress_interval = args.progress_interval
+        partial_interval = args.partial_interval
         if args.quest_mode and not args.test_mode:
-            run_quest_mode(driver, show_progress=show_progress)
+            run_quest_mode(driver, show_progress=debug_mode, ignore_empty=ignore_empty, 
+                          progress_interval=progress_interval, partial_interval=partial_interval)
         else:
-            run_solver(driver, test_mode=args.test_mode, ignore_empty=args.ignore_empty, show_progress=show_progress)
+            run_solver(driver, test_mode=args.test_mode, ignore_empty=ignore_empty, 
+                      show_progress=debug_mode, progress_interval=progress_interval, 
+                      partial_interval=partial_interval)
     except (PuzzlePageError, SystemExit):
         # Already handled, just re-raise
         raise
@@ -77,12 +85,15 @@ def main():
         print("Please check that you're on a valid puzzle page and try again.")
         raise SystemExit(1) from e
 
-def run_quest_mode(driver, show_progress=True):
+def run_quest_mode(driver, show_progress=True, ignore_empty=True, progress_interval=10.0, partial_interval=100.0):
     """Run the solver in quest mode, continuously solving puzzles.
     
     Args:
         driver: Selenium WebDriver instance.
         show_progress: If True, show progress updates during solving.
+        ignore_empty: If True, ignore empty cell markings for certain puzzles.
+        progress_interval: Interval in seconds for progress updates (default: 10.0).
+        partial_interval: Interval in seconds for partial solution display (default: 100.0).
     
     Raises:
         PuzzlePageError: If the current page is not a valid puzzle page.
@@ -100,53 +111,32 @@ def run_quest_mode(driver, show_progress=True):
     
     while True:
         try:
-            run_solver(driver, test_mode=False, ignore_empty=False, show_progress=show_progress)
+            run_solver(driver, test_mode=False, ignore_empty=ignore_empty, show_progress=show_progress,
+                      progress_interval=progress_interval, partial_interval=partial_interval)
         except PuzzlePageError as e:
             print(f"\n❌ Error in quest mode: {e}")
             print("Quest mode stopped. Please navigate to a puzzle page and try again.")
             raise SystemExit(1) from e
         
         try:
-            time.sleep(WAIT_MEDIUM)
-            check_puzzle_solved(driver)
-            time.sleep(WAIT_MEDIUM)
-            new_puzzle = []
-            while new_puzzle == []:
-                new_puzzle = driver.find_elements(By.CSS_SELECTOR, ".new-puzzle")
-                time.sleep(WAIT_SHORT)
-            new_puzzle[0].click()
-            time.sleep(WAIT_LONG)
+            # Create a temporary submitter to use its methods
+            from submitter.submitter import TableSubmitter
+            temp_submitter = TableSubmitter(driver, {"height": 1, "width": 1}, offset=0)
+            temp_submitter.open_new_puzzle(WAIT_SHORT, WAIT_MEDIUM, WAIT_LONG)
         except Exception as e:
             print(f"An error occurred in quest mode: {e}")
             print("Resetting puzzle and continuing...")
             try:
-                reset_puzzle(driver)
+                # Create a temporary submitter to use its clear_grid method
+                from submitter.submitter import TableSubmitter
+                temp_submitter = TableSubmitter(driver, {"height": 1, "width": 1}, offset=0)
+                temp_submitter.clear_grid()
             except Exception as reset_error:
                 print(f"Failed to reset puzzle: {reset_error}")
                 print("Quest mode stopped.")
                 raise SystemExit(1) from reset_error
 
 
-def check_puzzle_solved(driver):
-    """Check if puzzle is solved and click the check button if needed."""
-    if driver.find_elements(By.CSS_SELECTOR, ".new-puzzle"):
-        return  # Puzzle already solved
-    
-    check_button = driver.find_elements(By.CSS_SELECTOR, "puzzle-button[caption='Check']")
-    if not check_button:
-        menu = driver.find_elements(By.ID, "additional-menu")
-        if menu:
-            smart_click(driver, menu[0])
-            time.sleep(WAIT_MEDIUM)
-    
-    check_button = driver.find_elements(By.CSS_SELECTOR, "puzzle-button[caption='Check']")
-    if check_button:
-        smart_click(driver, check_button[0])
-        time.sleep(WAIT_MEDIUM)
-    
-    menu = driver.find_elements(By.ID, "additional-menu")
-    if menu:
-        smart_click(driver, menu[0])
     
 def summarize_task(info, time_diff):
     """Save task summary to JSON file with time statistics."""
@@ -168,28 +158,6 @@ def summarize_task(info, time_diff):
     with open(SUMMARY_FILE_PATH, "w") as json_file:
         json.dump(summary_data, json_file, indent=4)
 
-def reset_puzzle(driver):
-    """Reset the current puzzle to its initial state."""
-    restart_button = driver.find_elements(By.CSS_SELECTOR, "puzzle-button[caption='Restart']")
-    if not restart_button:
-        menu = driver.find_elements(By.ID, "additional-menu")
-        if menu:
-            smart_click(driver, menu[0])
-            time.sleep(WAIT_MEDIUM)
-    
-    restart_button = driver.find_elements(By.CSS_SELECTOR, "puzzle-button[caption='Restart']")
-    if restart_button:
-        smart_click(driver, restart_button[0])
-        time.sleep(WAIT_MEDIUM)
-    
-    actions = ActionChains(driver)
-    actions.send_keys(Keys.ENTER).perform()
-    time.sleep(WAIT_MEDIUM)
-    
-    menu = driver.find_elements(By.ID, "additional-menu")
-    if menu:
-        smart_click(driver, menu[0])
-    
 def configure_puzzle_info(info):
     """Configure puzzle-specific metadata based on puzzle type.
     
@@ -286,12 +254,15 @@ def apply_puzzle_specific_config(info):
         info["killer_x"] = info["type"] in ["daily", "monthly"]
 
 
-def create_solver(info, show_progress=True):
+def create_solver(info, show_progress=True, partial_solution_callback=None, progress_interval=10.0, partial_interval=100.0):
     """Create the appropriate solver for the puzzle type.
     
     Args:
         info: Dictionary containing puzzle information.
         show_progress: If True, show progress updates during solving.
+        partial_solution_callback: Optional callback to display partial solution.
+        progress_interval: Interval in seconds for progress updates (default: 10.0).
+        partial_interval: Interval in seconds for partial solution display (default: 100.0).
     
     Returns:
         Solver instance for the puzzle type.
@@ -312,7 +283,8 @@ def create_solver(info, show_progress=True):
     if puzzle_type not in solvers:
         raise NotImplementedError(f"Solver for puzzle type '{puzzle_type}' is not implemented.")
     
-    return solvers[puzzle_type](info, show_progress=show_progress)
+    return solvers[puzzle_type](info, show_progress=show_progress, partial_solution_callback=partial_solution_callback,
+                                progress_interval=progress_interval, partial_interval=partial_interval)
 
 
 def calculate_submission_offset(info):
@@ -341,14 +313,16 @@ def apply_ignore_empty_filter(info, ignore_empty):
                     info["solution"][i][j] = 0
 
 
-def run_solver(driver, test_mode=False, ignore_empty=False, show_progress=True):
+def run_solver(driver, test_mode=False, ignore_empty=True, show_progress=True, progress_interval=10.0, partial_interval=100.0):
     """Main solver workflow: extract, parse, solve, and submit puzzle.
     
     Args:
         driver: Selenium WebDriver instance.
         test_mode: If True, don't save statistics.
-        ignore_empty: If True, ignore empty cell markings for certain puzzles.
-        show_progress: If True, show progress updates every 10 seconds during solving.
+        ignore_empty: If True, ignore empty cell markings for certain puzzles (default: True).
+        show_progress: If True, show progress updates during solving.
+        progress_interval: Interval in seconds for progress updates (default: 10.0).
+        partial_interval: Interval in seconds for partial solution display (default: 100.0).
     
     Raises:
         PuzzlePageError: If the current page is not a valid puzzle page.
@@ -381,29 +355,66 @@ def run_solver(driver, test_mode=False, ignore_empty=False, show_progress=True):
     # Step 4: Apply puzzle-specific configuration
     apply_puzzle_specific_config(info)
     
-    # Step 5: Solve puzzle
-    if show_progress:
-        print("Solving puzzle (progress updates every 10 seconds)...")
-    solver = create_solver(info, show_progress=show_progress)
+    # Step 5: Initialize solver
+    print(f"Initializing {info['puzzle']} solver...")
+    init_start_time = time.time()
     
-    start_time = time.time()
+    # Create submitter early for partial solution display
+    offset = calculate_submission_offset(info)
+    submitter = TableSubmitter(driver, info, offset=offset)
+    
+    # Create callback for partial solution display
+    def display_partial_solution(board):
+        """Callback to display partial solution every 100 seconds."""
+        try:
+            print("Clearing grid and displaying partial solution...")
+            submitter.clear_grid()
+            time.sleep(0.5)  # Wait for grid to clear
+            submitter.submit(board)
+            print("Partial solution displayed.")
+        except Exception as e:
+            print(f"Warning: Could not display partial solution: {e}")
+    
+    solver = create_solver(
+        info, 
+        show_progress=show_progress,
+        partial_solution_callback=display_partial_solution if show_progress else None,
+        progress_interval=progress_interval,
+        partial_interval=partial_interval
+    )
+    init_end_time = time.time()
+    init_time_diff = init_end_time - init_start_time
+    print(f"Solver initialized in {init_time_diff:.2f} seconds.")
+    
+    # Step 6: Solve puzzle
+    if show_progress:
+        print("Solving puzzle (debug mode: progress updates every 10 seconds, partial solution every 100 seconds)...")
+    else:
+        print("Solving puzzle...")
+    solve_start_time = time.time()
     info["solution"] = solver.solve()
-    end_time = time.time()
-    time_diff = end_time - start_time
-    print(f"Solved puzzle in {time_diff:.2f} seconds.")
+    solve_end_time = time.time()
+    solve_time_diff = solve_end_time - solve_start_time
+    print(f"Solved puzzle in {solve_time_diff:.2f} seconds.")
+    
+    total_time = init_time_diff + solve_time_diff
+    print(f"Total time: {total_time:.2f} seconds (init: {init_time_diff:.2f}s, solve: {solve_time_diff:.2f}s)")
     
     if not test_mode:
-        summarize_task(info, time_diff)
+        # Use solving time (not initialization time) for statistics
+        summarize_task(info, solve_time_diff)
     
-    # Step 6: Submit solution
-    offset = calculate_submission_offset(info)
-    
+    # Step 7: Submit solution
     if info["puzzle"] not in SUPPORTED_PUZZLES:
         raise NotImplementedError(f"Submitter for puzzle type '{info['puzzle']}' is not implemented.")
     
     apply_ignore_empty_filter(info, ignore_empty)
     
-    submitter = TableSubmitter(driver, info, offset=offset)
+    # Submitter already created, clear grid then submit the final solution
+    print("Clearing grid before submission...")
+    submitter.clear_grid()
+    time.sleep(0.5)  # Wait for grid to clear
+    print("Submitting solution...")
     submitter.submit(info["solution"])
 
 if __name__ == "__main__":

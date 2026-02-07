@@ -7,15 +7,19 @@ class FutoshikiSolver(SudokuSolver):
     Futoshiki adds greater-than/less-than constraints between adjacent cells.
     """
     
-    def __init__(self, info, show_progress=True):
+    def __init__(self, info, show_progress=True, partial_solution_callback=None, progress_interval=10.0, partial_interval=100.0):
         """Initialize the Futoshiki solver.
         
         Args:
             info: Dictionary containing puzzle information including:
                 - cell_info_table: Directions where current cell is greater
             show_progress: If True, show progress updates during solving.
+            partial_solution_callback: Optional callback to display partial solution.
+            progress_interval: Interval in seconds for progress updates (default: 10.0).
+            partial_interval: Interval in seconds for partial solution display (default: 100.0).
         """
-        super().__init__(info, show_progress=show_progress)
+        super().__init__(info, show_progress=show_progress, partial_solution_callback=partial_solution_callback,
+                        progress_interval=progress_interval, partial_interval=partial_interval)
         self.trim_is_overkill = False
         self.adj_more = [[] for _ in range(self.height)]
         self.adj_less = [[] for _ in range(self.height)]
