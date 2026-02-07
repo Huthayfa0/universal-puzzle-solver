@@ -137,21 +137,34 @@ class TaskParserBase:
 
 class TableTaskParser(TaskParserBase):
     def parse(self, raw_task):
-        """Parse table-based task into a 2D grid structure."""
+        """Parse table-based task into a 2D grid structure.
+        When info['binary'] is True (e.g. Binairo), digits 0 and 1 are stored as 'W' and 'B'.
+        Otherwise, 0 is stored as 2; letter expansion uses 2 (binary) or 0 (non-binary).
+        """
         task_data = {}
         table = []
         char_idx = 0
-        
+        binary = self.info.get("binary", False)
+
         while char_idx < len(raw_task):
             char = raw_task[char_idx]
             if char in ('W', 'B'):
                 table.append(char)
             elif char.isdigit():
                 char_start = char_idx
-                while (char_idx + 1 < len(raw_task)) and raw_task[char_idx + 1].isdigit():
+                while (not binary and char_idx + 1 < len(raw_task)) and raw_task[char_idx + 1].isdigit():
                     char_idx += 1
                 number = int(raw_task[char_start:char_idx + 1])
-                table.append(number)
+                if binary:
+                    # Binary table: 0 → W (white), 1 → B (black)
+                    if number == 0:
+                        table.append('W')
+                    elif number == 1:
+                        table.append('B')
+                    else:
+                        table.append(number)  # e.g. 2 for empty
+                else:
+                    table.append(2 if number == 0 else number)
             elif char == '_':
                 pass  # Skip underscore
             else:

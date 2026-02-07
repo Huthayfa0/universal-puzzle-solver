@@ -12,6 +12,7 @@ from . import renzoku_solver
 from . import futoshiki_solver
 from . import skyscrapers_solver
 from . import killer_sudoku_solver
+from . import binairo_solver
 
 from .solver import BaseSolver
 
@@ -25,4 +26,5 @@ __all__ = [
     "futoshiki_solver",
     "skyscrapers_solver",
     "killer_sudoku_solver",
+    "binairo_solver",
 ]

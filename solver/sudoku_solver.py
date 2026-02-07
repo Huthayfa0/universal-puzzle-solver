@@ -366,7 +366,6 @@ class SudokuSolver(BaseSolver):
         Returns:
             2D list representing the solved puzzle board.
         """
-        self._start_progress_tracking()
         total_cells = len(self.cells_to_fill)
         backtrack_count = [0]  # Use list to allow modification in nested function
         
@@ -427,10 +426,6 @@ class SudokuSolver(BaseSolver):
             
             return False
 
-        try:
-            solve_sudoku()
-        finally:
-            self._stop_progress_tracking()
-        
+        solve_sudoku()
         return self.board
     

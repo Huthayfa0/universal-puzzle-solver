@@ -24,6 +24,7 @@ from solver import (
     futoshiki_solver,
     skyscrapers_solver,
     killer_sudoku_solver,
+    binairo_solver,
 )
 from submitter.submitter import TableSubmitter
 
@@ -39,7 +40,7 @@ NUMERIC_PUZZLES = ["sudoku", "renzoku", "futoshiki", "jigsaw-sudoku", "skyscrape
 REGULAR_SUBTABLE_PUZZLES = ["sudoku", "killer-sudoku"]
 IRREGULAR_SUBTABLE_PUZZLES = ["star-battle", "jigsaw-sudoku"]
 SUPPORTED_PUZZLES = ["sudoku", "kakurasu", "nonograms", "star-battle", "renzoku", 
-                     "futoshiki", "jigsaw-sudoku", "skyscrapers", "killer-sudoku"]
+                     "futoshiki", "jigsaw-sudoku", "skyscrapers", "killer-sudoku", "binairo"]
 def main():
     """Main entry point for the puzzle solver."""
     parser = argparse.ArgumentParser(
@@ -83,7 +84,7 @@ def main():
     except Exception as e:
         print(f"\n❌ Unexpected error: {e}")
         print("Please check that you're on a valid puzzle page and try again.")
-        raise SystemExit(1) from e
+        raise Exception(e) from e
 
 def run_quest_mode(driver, show_progress=True, ignore_empty=True, progress_interval=10.0, partial_interval=100.0):
     """Run the solver in quest mode, continuously solving puzzles.
@@ -196,6 +197,10 @@ def configure_puzzle_info(info):
     if puzzle_type == "skyscrapers":
         info["double_borders"] = True
 
+    # Binairo uses a binary table: 0 and 1 are treated as W/B by the parser
+    if puzzle_type == "binairo":
+        info["binary"] = True
+
 
 def create_parser(info):
     """Create the appropriate parser for the puzzle type."""
@@ -209,6 +214,7 @@ def create_parser(info):
         "jigsaw-sudoku": lambda: CombinedTaskParser(info, [TableTaskParser, BoxesTaskParser]),
         "skyscrapers": lambda: CombinedTaskParser(info, [BorderTaskParser, TableTaskParser], ","),
         "killer-sudoku": lambda: _create_killer_sudoku_parser(info),
+        "binairo": lambda: TableTaskParser(info),
     }
     
     puzzle_type = info["puzzle"]
@@ -277,6 +283,7 @@ def create_solver(info, show_progress=True, partial_solution_callback=None, prog
         "jigsaw-sudoku": sudoku_solver.SudokuSolver,
         "skyscrapers": skyscrapers_solver.SkyscrapersSolver,
         "killer-sudoku": killer_sudoku_solver.KillerSudokuSolver,
+        "binairo": binairo_solver.BinairoSolver,
     }
     
     puzzle_type = info["puzzle"]
@@ -392,7 +399,13 @@ def run_solver(driver, test_mode=False, ignore_empty=True, show_progress=True, p
     else:
         print("Solving puzzle...")
     solve_start_time = time.time()
-    info["solution"] = solver.solve()
+    if show_progress and hasattr(solver, '_start_progress_tracking'):
+        solver._start_progress_tracking()
+    try:
+        info["solution"] = solver.solve()
+    finally:
+        if show_progress and hasattr(solver, '_stop_progress_tracking'):
+            solver._stop_progress_tracking()
     solve_end_time = time.time()
     solve_time_diff = solve_end_time - solve_start_time
     print(f"Solved puzzle in {solve_time_diff:.2f} seconds.")

@@ -518,8 +518,6 @@ class StarBattleSolver(BaseSolver):
         Returns:
             2D list representing the solved puzzle board, or None if unsolvable.
         """
-        self._start_progress_tracking()
-        
         self.cells_order = [(i, j) for i in range(self.height) for j in range(self.width)]
         self.cells_order = sorted(
             self.cells_order,
@@ -652,11 +650,7 @@ class StarBattleSolver(BaseSolver):
             )
             return solve_puzzle_with_progress(cell_idx + 1)
         
-        try:
-            result = solve_puzzle_with_progress()
-        finally:
-            self._stop_progress_tracking()
-        
+        result = solve_puzzle_with_progress()
         if result:
             return self.board
         return None

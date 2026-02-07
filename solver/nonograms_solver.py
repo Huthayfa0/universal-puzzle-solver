@@ -474,8 +474,6 @@ class NonogramsSolver(BaseSolver):
         Returns:
             2D list representing the solved puzzle board.
         """
-        self._start_progress_tracking()
-        
         self.clues_order = []
         rL, rR = 0, self.height
         cL, cR = 0, self.width
@@ -502,9 +500,5 @@ class NonogramsSolver(BaseSolver):
                 self.clues_order.append((j, 'col'))
             cR -= 3
         
-        try:
-            self.solve_puzzle()
-        finally:
-            self._stop_progress_tracking()
-        
+        self.solve_puzzle()
         return self.board

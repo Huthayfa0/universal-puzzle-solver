@@ -8,7 +8,6 @@ from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import (
     ElementClickInterceptedException,
     ElementNotInteractableException,
-    NoAlertPresentException,
 )
 
 
@@ -102,50 +101,16 @@ class SubmitterBase:
 
     def extract(self, offset=0):
         """Extract all selectable cells from the page."""
-        self.all_cells = self.driver.find_elements(By.CSS_SELECTOR, ".selectable")
+        self.all_cells = self.driver.find_elements(By.CSS_SELECTOR, ".selectable, .task-cell")
     
     def clear_grid(self):
-        """Clear the grid by using the restart functionality.
+        """Clear the grid by calling Game.resetState() in the page.
         
         Note: After clearing, cell elements become stale and need to be re-extracted.
         Call extract() after clear_grid() if you plan to use the cells afterward.
         """
-        # Try to find restart button
-        restart_button = self.driver.find_elements(By.CSS_SELECTOR, "puzzle-button[caption='Restart']")
-        if not restart_button:
-            # Open menu if restart button is not visible
-            menu = self.driver.find_elements(By.ID, "additional-menu")
-            if menu:
-                smart_click(self.driver, menu[0])
-                time.sleep(0.5)
-        
-        # Click restart button
-        restart_button = self.driver.find_elements(By.CSS_SELECTOR, "puzzle-button[caption='Restart']")
-        if restart_button:
-            smart_click(self.driver, restart_button[0])
-            time.sleep(0.5)
-        
-        # Handle the alert dialog if it appears
-        try:
-            alert = self.driver.switch_to.alert
-            alert.accept()  # Accept the "Start over?" confirmation
-            time.sleep(0.5)
-        except NoAlertPresentException:
-            # No alert appeared, try pressing ENTER as fallback
-            actions = ActionChains(self.driver)
-            actions.send_keys(Keys.ENTER).perform()
-            time.sleep(0.5)
-        
-        # Close menu if it's open
-        menu = self.driver.find_elements(By.ID, "additional-menu")
-        if menu:
-            smart_click(self.driver, menu[0])
-            time.sleep(0.5)
-        
-        # Wait a bit for the page to stabilize after restart
+        self.driver.execute_script("Game.resetState();")
         time.sleep(0.5)
-        
-        # Re-extract cells after restart (they become stale)
         self.extract(self.offset)
     
     def check_puzzle_solved(self):
