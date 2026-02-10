@@ -190,7 +190,20 @@ class TableSubmitter(SubmitterBase):
                 if value == 0:
                     continue  # Skip empty cells
                 self.submit_val(cell, value)
-                
+
+
+class WordsearchSubmitter(TableSubmitter):
+    """Submitter for wordsearch: solution is a list of word paths; each path is [(r,c), ...]."""
+
+    def submit(self, solution):
+        """Submit by selecting each word: click cells of each path in order."""
+        for path in solution:
+            for r, c in path:
+                cell = self.cells[r][c]
+                smart_click(self.driver, cell)
+                human_delay()
+
+
 class WallsSubmitter(SubmitterBase):
     def extract(self, offset=0):
         """Extract horizontal and vertical wall cells."""
@@ -234,6 +247,51 @@ class WallsSubmitter(SubmitterBase):
                 if value == 0:
                     continue  # Skip no-wall cells
                 self.submit_val(cell, value)
+
+
+class HashiSubmitter(SubmitterBase):
+    """Submitter for Hashi: solution has horizontal_bridges and vertical_bridges (0, 1, or 2)."""
+
+    def extract(self, offset=0):
+        """Extract horizontal and vertical bridge edge cells (same layout as WallsSubmitter)."""
+        super().extract(offset)
+        self.horizontal_bridges = []
+        self.vertical_bridges = []
+        for row in range(self.info["height"]):
+            row_cells = []
+            for col in range(self.info["width"] - 1):
+                index = row * (self.info["width"] - 1) + col + offset
+                row_cells.append(self.all_cells[index])
+            self.horizontal_bridges.append(row_cells)
+        vertical_offset = self.info["height"] * (self.info["width"] - 1) + offset
+        for row in range(self.info["height"] - 1):
+            row_cells = []
+            for col in range(self.info["width"]):
+                index = vertical_offset + row * self.info["width"] + col
+                row_cells.append(self.all_cells[index])
+            self.vertical_bridges.append(row_cells)
+
+    def submit(self, solution):
+        """Submit bridge counts (0, 1, or 2) by clicking each edge cell."""
+        for row in range(self.info["height"]):
+            for col in range(self.info["width"] - 1):
+                cell = self.horizontal_bridges[row][col]
+                value = solution["horizontal_bridges"][row][col]
+                if value == 0:
+                    continue
+                for _ in range(value):
+                    smart_click(self.driver, cell)
+                    human_delay()
+        for row in range(self.info["height"] - 1):
+            for col in range(self.info["width"]):
+                cell = self.vertical_bridges[row][col]
+                value = solution["vertical_bridges"][row][col]
+                if value == 0:
+                    continue
+                for _ in range(value):
+                    smart_click(self.driver, cell)
+                    human_delay()
+
 
 class WallsAndTablesSubmitter(TableSubmitter, WallsSubmitter):
     def extract(self, offset=0):

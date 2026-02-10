@@ -204,17 +204,21 @@ class BinairoSolver(BaseSolver):
 
     _PROPAGATE_EVERY = 6
 
+    def _is_solution_complete(self):
+        """Return True if the current board is a valid complete solution (override in subclasses)."""
+        return (
+            self._no_three_adjacent_anywhere()
+            and self._all_counts_correct()
+            and self._rows_unique()
+            and self._cols_unique()
+        )
+
     def _solve_at(self, cell_idx, backtrack_count=None):
         if backtrack_count is None:
             backtrack_count = [0]
         total = self.height * self.width
         if cell_idx >= total:
-            return (
-                self._no_three_adjacent_anywhere()
-                and self._all_counts_correct()
-                and self._rows_unique()
-                and self._cols_unique()
-            )
+            return self._is_solution_complete()
 
         if cell_idx > 0 and cell_idx % self._PROPAGATE_EVERY == 0:
             while self._propagate():
