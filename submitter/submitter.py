@@ -93,14 +93,17 @@ def smart_write_number(driver, element, number):
     smart_write(driver, element, number if number <= 9 else chr(number - 10 + ord('a')))
 
 class SubmitterBase:
-    def __init__(self, driver, info=None, offset=0):
+    def __init__(self, driver, info=None, offset=0, tags=".selectable, .task-cell"):
         self.driver = driver
         self.info = info if info is not None else {}
         self.offset = offset  # Store offset for re-extraction after clear_grid
+        self.tags = tags
         self.extract(offset)
 
-    def extract(self, offset=0, tags = ".selectable, .task-cell"):
+    def extract(self, offset=0, tags=None):
         """Extract all selectable cells from the page."""
+        if tags is None:
+            tags = self.tags
         self.all_cells = self.driver.find_elements(By.CSS_SELECTOR, tags)
     
     def clear_grid(self):

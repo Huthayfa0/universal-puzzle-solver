@@ -10,6 +10,7 @@ from parser.parser import (
     extract_task,
     PuzzlePageError,
     TableTaskParser,
+    DominosaTableTaskParser,
     BorderTaskParser,
     BoxesTaskParser,
     CellTableTaskParser,
@@ -254,7 +255,7 @@ def create_parser(info):
         "binairo": lambda: TableTaskParser(info),
         "binairo-plus": lambda: CombinedTaskParser(info, [TableTaskParser, CellTableTaskParser], "|"),
         "norinori": lambda: BoxesTaskParser(info),
-        "dominosa": lambda: TableTaskParser(info),
+        "dominosa": lambda: DominosaTableTaskParser(info),
         "hitori": lambda: TableTaskParser(info),
         "hashi": lambda: TableTaskParser(info),
         "heyawake": lambda: BoxesTaskParser(info),
@@ -407,6 +408,10 @@ def create_submitter(driver, info, offset=0):
     """Create the appropriate submitter for the puzzle type."""
     if info["puzzle"] in ("wordsearch", "boggle"):
         return WordsearchSubmitter(driver, info, offset=offset)
+    if info["puzzle"] == "stitches":
+        return TableBetweenSubmitter(driver, info, offset=offset)
+    if info["puzzle"] == "dominosa":
+        return TableBetweenSubmitter(driver, info, offset=offset, tags=".cell")
     if info["puzzle"] == "slither-link":
         submit_info = {**info, "height": info["height"] + 1, "width": info["width"] + 1}
         return WallsSubmitter(driver, submit_info, offset=offset)
@@ -414,8 +419,6 @@ def create_submitter(driver, info, offset=0):
         return WallsSubmitter(driver, info, offset=offset)
     if info["puzzle"] == "hashi":
         return HashiSubmitter(driver, info, offset=offset)
-    if info["puzzle"] == "stitches":
-        return TableBetweenSubmitter(driver, info, offset=offset)
     return TableSubmitter(driver, info, offset=offset)
 
 

@@ -61,6 +61,8 @@ def extract_task(driver):
             - "task": Raw task string to be parsed
             - "height": Puzzle height from Game.puzzleHeight (if available)
             - "width": Puzzle width from Game.puzzleWidth (if available)
+            - "single_option": Present if the save entry in Settings.bag includes it
+              (enables :class:`TableTaskParser` compact ``bb_ca__``-style encoding)
     
     Raises:
         PuzzlePageError: If the page is not a valid puzzle page.
@@ -154,11 +156,18 @@ class TableTaskParser(TaskParserBase):
         When info['single_number'] is True, each cell is a single digit (one number per cell);
         only one digit is consumed per token and 0/1 are stored as 'W'/'B'. Otherwise, multi-digit
         numbers are allowed and 0 is stored as 2; letter expansion uses 2 or 0 accordingly.
+
+        When info['single_option'] is True, the task is a run-length form for a binary-ish grid where
+        each cell is either empty (0) or filled (1). Lowercase letters expand to *n* zeros followed by
+        one 1, with n = 1 for 'a', 2 for 'b', etc. (e.g. ``a`` → ``[0, 1]``, ``b`` → ``[0, 0, 1]``).
+        Underscore ``_`` is a single 1. Example: ``"bb_ca__"`` →
+        ``[0,0,1,0,0,1,1,0,0,0,1,0,1,1,1]``. Uppercase and digit rules are unchanged.
         """
         task_data = {}
         table = []
         char_idx = 0
         single_number = self.info.get("single_number", False)
+        single_option = self.info.get("single_option", False)
 
         while char_idx < len(raw_task):
             char = raw_task[char_idx]
@@ -178,10 +187,16 @@ class TableTaskParser(TaskParserBase):
                 else:
                     table.append('Zero' if number == 0 else number)
             elif char == '_':
-                pass  # Skip underscore
-            else:
-                # Expand letter to multiple zeros (a=1, b=2, etc.)
-                table.extend([0] * (ord(char) - ord('a') + 1))
+                if single_option:
+                    table.append(1)
+                else:
+                    pass  # Skip underscore (non single_option)
+            elif char.islower():
+                n = ord(char) - ord('a') + 1
+                # n zeros
+                table.extend([0] * n)
+                if single_option:
+                    table.append(1)
             char_idx += 1
         
         task_data["height"] = self.info.get("height")
@@ -460,3 +475,35 @@ class CombinedTaskParser(TaskParserBase):
         return combined_data
 
 
+class DominosaTableTaskParser(TaskParserBase):
+    def parse(self, raw_task):
+        """Parse table-based task into a 2D grid structure.
+        When info['single_number'] is True, each cell is a single digit (one number per cell);
+        only one digit is consumed per token and 0/1 are stored as 'W'/'B'. Otherwise, multi-digit
+        numbers are allowed and 0 is stored as 2; letter expansion uses 2 or 0 accordingly.
+        """
+        task_data = {}
+        table = []
+        char_idx = 0
+
+        while char_idx < len(raw_task):
+            char = raw_task[char_idx]
+            if char.isdigit():
+                number = int(char)
+                table.append(number)
+            elif char == '[':
+                char_end = char_idx + 1
+                while raw_task[char_end] != ']':
+                    char_end += 1
+                number = int(raw_task[char_idx + 1:char_end])
+                table.append(number)
+                char_idx = char_end
+            char_idx += 1
+        
+        task_data["height"] = self.info.get("height")+1
+        task_data["width"] = self.info.get("width")+2
+        task_data["table"] = [
+            table[i:i + task_data["width"]]
+            for i in range(0, len(table), task_data["width"])
+        ]
+        return task_data
