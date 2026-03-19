@@ -13,4 +13,9 @@ def get_driver():
     options = webdriver.ChromeOptions()
     options.debugger_address = "localhost:9222"
     options.add_argument("--start-maximized")
-    return webdriver.Chrome(options=options)
+    driver = webdriver.Chrome(options=options)
+    for handle in driver.window_handles:
+      driver.switch_to.window(handle)
+      if "puzzles-mobile.com" in driver.current_url:
+        break
+    return driver

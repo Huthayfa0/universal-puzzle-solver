@@ -15,9 +15,7 @@ from parser.parser import (
     CellTableTaskParser,
     CombinedTaskParser,
     WordsearchTaskParser,
-    ShingokiTaskParser,
     ThermometersTaskParser,
-    KakuroTaskParser,
 )
 from solver import (
     sudoku_solver,
@@ -46,20 +44,24 @@ from solver import (
     masyu_solver,
     shikaku_solver,
     tents_solver,
+    lits_solver,
     thermometers_solver,
     galaxies_solver,
     slither_link_solver,
+    kakuro_solver,
+    minesweeper_solver,
     mosaic_solver,
     shakashaka_solver,
     pipes_solver,
     aquarium_solver,
+    slant_solver,
     tapa_solver,
     yin_yang_solver,
     solo_chess_solver,
     chess_ranger_solver,
     chess_melee_solver,
 )
-from submitter.submitter import TableSubmitter, WordsearchSubmitter, WallsSubmitter, HashiSubmitter
+from submitter.submitter import TableSubmitter, WordsearchSubmitter, WallsSubmitter, HashiSubmitter, TableBetweenSubmitter
 
 # Constants
 SUMMARY_FILE_PATH = "summary.json"
@@ -73,7 +75,7 @@ NUMERIC_PUZZLES = ["sudoku", "renzoku", "futoshiki", "jigsaw-sudoku", "skyscrape
 REGULAR_SUBTABLE_PUZZLES = ["sudoku", "killer-sudoku"]
 IRREGULAR_SUBTABLE_PUZZLES = ["star-battle", "jigsaw-sudoku"]
 SUPPORTED_PUZZLES = ["sudoku", "kakurasu", "nonograms", "star-battle", "renzoku", 
-                     "futoshiki", "jigsaw-sudoku", "skyscrapers", "killer-sudoku", "binairo", "binairo-plus", "norinori", "dominosa", "hitori", "kurodoko", "nurikabe", "stitches", "wordsearch", "boggle", "light-up", "shakashaka", "battleships", "hashi", "heyawake", "masyu", "shikaku", "tents", "lits", "thermometers", "galaxies", "slither-link", "minesweeper", "pipes", "aquarium", "tapa", "yin-yang", "solo-chess", "chess-ranger", "chess-melee"]
+                     "futoshiki", "jigsaw-sudoku", "skyscrapers", "killer-sudoku", "binairo", "binairo-plus", "norinori", "dominosa", "hitori", "kurodoko", "nurikabe", "stitches", "wordsearch", "boggle", "light-up", "shingoki", "shakashaka", "battleships", "hashi", "heyawake", "masyu", "shikaku", "tents", "lits", "thermometers", "galaxies", "slither-link", "slant", "kakuro", "minesweeper", "mosaic", "pipes", "aquarium", "tapa", "yin-yang", "solo-chess", "chess-ranger", "chess-melee"]
 def main():
     """Main entry point for the puzzle solver."""
     parser = argparse.ArgumentParser(
@@ -230,9 +232,9 @@ def configure_puzzle_info(info):
     if puzzle_type == "skyscrapers":
         info["double_borders"] = True
 
-    # Binairo, Binairo+, and Battleships use a binary table: 0 and 1 are treated as W/B by the parser
+    # Puzzles where each cell is a single number (one digit per cell); 0/1 stored as W/B by parser
     if puzzle_type in ("binairo", "binairo-plus", "battleships", "yin-yang"):
-        info["binary"] = True
+        info["single_number"] = True
     if puzzle_type == "binairo-plus":
         info["binairo_plus"] = True
 
@@ -252,27 +254,34 @@ def create_parser(info):
         "binairo": lambda: TableTaskParser(info),
         "binairo-plus": lambda: CombinedTaskParser(info, [TableTaskParser, CellTableTaskParser], "|"),
         "norinori": lambda: BoxesTaskParser(info),
+        "dominosa": lambda: TableTaskParser(info),
         "hitori": lambda: TableTaskParser(info),
         "hashi": lambda: TableTaskParser(info),
+        "heyawake": lambda: BoxesTaskParser(info),
         "kurodoko": lambda: TableTaskParser(info),
         "nurikabe": lambda: TableTaskParser(info),
         "stitches": lambda: CombinedTaskParser(info, [BorderTaskParser, BoxesTaskParser], ";"),
         "wordsearch": lambda: WordsearchTaskParser(info),
         "boggle": lambda: WordsearchTaskParser(info),
-        "shingoki": lambda: ShingokiTaskParser(info),
-        "masyu": lambda: ShingokiTaskParser(info),
-        "kakuro": lambda: KakuroTaskParser(info),
+        "light-up": lambda: TableTaskParser(info),
+        "shingoki": lambda: TableTaskParser(info),
+        "masyu": lambda: TableTaskParser(info),
+        "kakuro": lambda: TableTaskParser(info),
         "slither-link": lambda: TableTaskParser(info),
         "slant": lambda: TableTaskParser(info),
-        "battleships": lambda: CombinedTaskParser(info, [BorderTaskParser, TableTaskParser], ","),
+        "battleships": lambda: CombinedTaskParser(info, [BorderTaskParser, TableTaskParser], ";"),
         "shikaku": lambda: TableTaskParser(info),
-        "tents": lambda: CombinedTaskParser(info, [BorderTaskParser, TableTaskParser], ","),
-        "galaxies": lambda: ShingokiTaskParser(info),
+        "tents": lambda: CombinedTaskParser(info, [TableTaskParser,BorderTaskParser], ","),
+        "lits": lambda: BoxesTaskParser(info),
+        "thermometers": lambda: ThermometersTaskParser(info),
+        "galaxies": lambda: TableTaskParser(info),
         "minesweeper": lambda: TableTaskParser(info),
+        "mosaic": lambda: TableTaskParser(info),
         "shakashaka": lambda: TableTaskParser(info),
         "pipes": lambda: TableTaskParser(info),
         "aquarium": lambda: CombinedTaskParser(info, [BorderTaskParser, BoxesTaskParser], ";"),
         "tapa": lambda: TableTaskParser(info),
+        "yin-yang": lambda: TableTaskParser(info),
         "solo-chess": lambda: TableTaskParser(info),
         "chess-ranger": lambda: TableTaskParser(info),
         "chess-melee": lambda: TableTaskParser(info),
@@ -295,10 +304,6 @@ def _create_killer_sudoku_parser(info):
 
 def apply_puzzle_specific_config(info):
     """Apply puzzle-specific configuration after parsing."""
-    # Nonograms special case
-    if info["puzzle"] == "nonograms" and info["type"] == "daily":
-        info["height"] = 30
-
     # Sudoku and killer-sudoku subtable dimensions
     if info["puzzle"] in ["sudoku", "killer-sudoku"]:
         if info["height"] == 16:
@@ -320,18 +325,6 @@ def apply_puzzle_specific_config(info):
     if info["puzzle"] == "killer-sudoku":
         info["killer_x"] = info["type"] in ["daily", "monthly"]
 
-    # Stitches: stitches per adjacent block pair (2÷ → 2, 3÷ → 3, etc.)
-    if info["puzzle"] == "stitches":
-        puzzle_type_str = str(info.get("type", "1"))
-        if puzzle_type_str.isdigit():
-            info["stitches_per_pair"] = int(puzzle_type_str)
-        else:
-            info["stitches_per_pair"] = 1
-
-    # Slant: parsed table is (H+1)x(W+1) point clues; set height/width to cell grid
-    if info["puzzle"] == "slant" and "table" in info and info["table"]:
-        info["height"] = len(info["table"]) - 1
-        info["width"] = len(info["table"][0]) - 1
 
 
 def create_solver(info, show_progress=True, partial_solution_callback=None, progress_interval=10.0, partial_interval=100.0):
@@ -368,7 +361,9 @@ def create_solver(info, show_progress=True, partial_solution_callback=None, prog
         "wordsearch": wordsearch_solver.WordsearchSolver,
         "boggle": boggle_solver.BoggleSolver,
         "light-up": light_up_solver.LightUpSolver,
+        "shingoki": shingoki_solver.ShingokiSolver,
         "battleships": battleships_solver.BattleshipsSolver,
+        "hashi": hashi_solver.HashiSolver,
         "heyawake": heyawake_solver.HeyawakeSolver,
         "masyu": masyu_solver.MasyuSolver,
         "shikaku": shikaku_solver.ShikakuSolver,
@@ -377,11 +372,13 @@ def create_solver(info, show_progress=True, partial_solution_callback=None, prog
         "thermometers": thermometers_solver.ThermometersSolver,
         "galaxies": galaxies_solver.GalaxiesSolver,
         "slither-link": slither_link_solver.SlitherLinkSolver,
+        "slant": slant_solver.SlantSolver,
         "kakuro": kakuro_solver.KakuroSolver,
+        "minesweeper": minesweeper_solver.MinesweeperSolver,
+        "mosaic": mosaic_solver.MosaicSolver,
         "shakashaka": shakashaka_solver.ShakashakaSolver,
         "pipes": pipes_solver.PipesSolver,
         "aquarium": aquarium_solver.AquariumSolver,
-        "slant": slant_solver.SlantSolver,
         "tapa": tapa_solver.TapaSolver,
         "yin-yang": yin_yang_solver.YinYangSolver,
         "solo-chess": solo_chess_solver.SoloChessSolver,
@@ -400,8 +397,8 @@ def create_solver(info, show_progress=True, partial_solution_callback=None, prog
 def calculate_submission_offset(info):
     """Calculate the offset for puzzle submission based on puzzle type."""
     if info["puzzle"] == "nonograms":
-        horizontal_sum = sum(len(v) for v in info["horizontal_borders"])
-        vertical_sum = sum(len(v) for v in info["vertical_borders"])
+        horizontal_sum = max(len(v) for v in info["horizontal_borders"])* info["width"]
+        vertical_sum = max(len(v) for v in info["vertical_borders"])* info["height"]
         return horizontal_sum + vertical_sum
     return 0
 
@@ -417,6 +414,8 @@ def create_submitter(driver, info, offset=0):
         return WallsSubmitter(driver, info, offset=offset)
     if info["puzzle"] == "hashi":
         return HashiSubmitter(driver, info, offset=offset)
+    if info["puzzle"] == "stitches":
+        return TableBetweenSubmitter(driver, info, offset=offset)
     return TableSubmitter(driver, info, offset=offset)
 
 

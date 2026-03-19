@@ -1,6 +1,3 @@
-from math import sqrt
-
-
 class PuzzlePageError(Exception):
     """Exception raised when the current page is not a valid puzzle page."""
     pass
@@ -50,8 +47,9 @@ def validate_puzzle_page(driver):
 def extract_task(driver):
     """Extract puzzle task information from the webpage.
     
-    Reads the puzzle task from the browser's JavaScript Settings.bag object
-    and extracts puzzle type and task data from the current URL and page state.
+    Reads the puzzle task from the browser's JavaScript Settings.bag object,
+    puzzle dimensions from Game.puzzleHeight / Game.puzzleWidth, and puzzle type
+    from the current URL.
     
     Args:
         driver: Selenium WebDriver instance pointing to the puzzle page.
@@ -61,6 +59,8 @@ def extract_task(driver):
             - "puzzle": Puzzle type (e.g., "sudoku", "kakurasu")
             - "type": Puzzle difficulty/variant (e.g., "daily", "weekly")
             - "task": Raw task string to be parsed
+            - "height": Puzzle height from Game.puzzleHeight (if available)
+            - "width": Puzzle width from Game.puzzleWidth (if available)
     
     Raises:
         PuzzlePageError: If the page is not a valid puzzle page.
@@ -81,6 +81,19 @@ def extract_task(driver):
     
     info["puzzle"] = url_parts[3]
     info["type"] = url_parts[-1]
+    
+    # Extract puzzle dimensions from Game object
+    try:
+        height = driver.execute_script("return typeof Game !== 'undefined' ? Game.puzzleHeight : null;")
+        width = driver.execute_script("return typeof Game !== 'undefined' ? Game.puzzleWidth : null;")
+        if height is not None and width is not None:
+            try:
+                info["height"] = int(height)
+                info["width"] = int(width)
+            except (TypeError, ValueError):
+                pass  # Parsers will derive from task
+    except Exception:
+        pass  # Parsers will derive height/width from task if not set
     
     # Try to get Settings.bag
     try:
@@ -138,33 +151,32 @@ class TaskParserBase:
 class TableTaskParser(TaskParserBase):
     def parse(self, raw_task):
         """Parse table-based task into a 2D grid structure.
-        When info['binary'] is True (e.g. Binairo), digits 0 and 1 are stored as 'W' and 'B'.
-        Otherwise, 0 is stored as 2; letter expansion uses 2 (binary) or 0 (non-binary).
+        When info['single_number'] is True, each cell is a single digit (one number per cell);
+        only one digit is consumed per token and 0/1 are stored as 'W'/'B'. Otherwise, multi-digit
+        numbers are allowed and 0 is stored as 2; letter expansion uses 2 or 0 accordingly.
         """
         task_data = {}
         table = []
         char_idx = 0
-        binary = self.info.get("binary", False)
+        single_number = self.info.get("single_number", False)
 
         while char_idx < len(raw_task):
             char = raw_task[char_idx]
-            if char in ('W', 'B'):
+            if char.isupper():
                 table.append(char)
             elif char.isdigit():
                 char_start = char_idx
-                while (not binary and char_idx + 1 < len(raw_task)) and raw_task[char_idx + 1].isdigit():
+                while (not single_number and char_idx + 1 < len(raw_task)) and raw_task[char_idx + 1].isdigit():
                     char_idx += 1
                 number = int(raw_task[char_start:char_idx + 1])
-                if binary:
-                    # Binary table: 0 → W (white), 1 → B (black)
+                if single_number:
+                    # Single-number row: 0 → W (white), 1 → B (black)
                     if number == 0:
-                        table.append('W')
-                    elif number == 1:
-                        table.append('B')
+                        table.append('Zero')
                     else:
                         table.append(number)  # e.g. 2 for empty
                 else:
-                    table.append(2 if number == 0 else number)
+                    table.append('Zero' if number == 0 else number)
             elif char == '_':
                 pass  # Skip underscore
             else:
@@ -172,11 +184,8 @@ class TableTaskParser(TaskParserBase):
                 table.extend([0] * (ord(char) - ord('a') + 1))
             char_idx += 1
         
-        if self.info.get("height") is not None:
-            task_data["height"] = self.info.get("height")
-        else:
-            task_data["height"] = int(sqrt(len(table)))
-        task_data["width"] = len(table) // task_data["height"]
+        task_data["height"] = self.info.get("height")
+        task_data["width"] = self.info.get("width")
         task_data["table"] = [
             table[i:i + task_data["width"]]
             for i in range(0, len(table), task_data["width"])
@@ -193,11 +202,8 @@ class BoxesTaskParser(TaskParserBase):
         task_data = {}
         table = list(map(self.parse_cell, raw_task.split(",")))
         
-        if self.info.get("height") is not None:
-            task_data["height"] = self.info.get("height")
-        else:
-            task_data["height"] = int(sqrt(len(table)))
-        task_data["width"] = len(table) // task_data["height"]
+        task_data["height"] = self.info.get("height")
+        task_data["width"] = self.info.get("width")
         task_data["boxes_table"] = [
             table[i:i + task_data["width"]]
             for i in range(0, len(table), task_data["width"])
@@ -232,26 +238,31 @@ class BorderTaskParser(TaskParserBase):
         """Parse border-based task into horizontal and vertical border constraints."""
         task_data = {}
         
-        if '.' in raw_task:
+        # Consider '.' or '_' as possible splitters (both for joining and for split)
+        if '.' in raw_task or '_' in raw_task:
             border = raw_task.split('/')
-            border = [
-                [int(y) if y.isdigit() else y for y in x.split('.')]
-                for x in border
-            ]
+            # For each border, split by '.' or '_' and parse as int if digit
+            def smart_split(x):
+                if '.' in x:
+                    cells = x.split('.')
+                elif '_' in x:
+                    cells = x.split('_')
+                else:
+                    cells = [x]
+                return [int(y) if y.isdigit() else y for y in cells]
+            border = [y for x in border for y in smart_split(x)]
         else:
             border = [int(x) if x.isdigit() else x for x in raw_task.split('/')]
         
-        if self.info.get("height") is not None:
-            task_data["height"] = self.info.get("height")
-        else:
-            task_data["height"] = len(border) // 2
-        task_data["width"] = len(border) - task_data["height"]
-        task_data["vertical_borders"] = border[:task_data["width"]]  # up or down values
-        task_data["horizontal_borders"] = border[task_data["width"]:]  # left or right values
-        
+        task_data["height"] = self.info.get("height")
+        task_data["width"] = self.info.get("width")
         if "double_borders" in self.info:
-            task_data["height"] //= 2
-            task_data["width"] //= 2
+            task_data["vertical_borders"] = border[:task_data["width"] * 2]
+            task_data["horizontal_borders"] = border[task_data["width"] * 2:]
+        else:
+            task_data["vertical_borders"] = border[:task_data["width"]]  # up or down values
+            task_data["horizontal_borders"] = border[task_data["width"]:]  # left or right values
+        
         return task_data
 
 class CellTableTaskParser(TaskParserBase):
@@ -314,11 +325,8 @@ class CellTableTaskParser(TaskParserBase):
             cell_table = list(map(self.parse_letters, cells))
             n_cells = len(table)
         
-        if self.info.get("height") is not None:
-            task_data["height"] = self.info.get("height")
-        else:
-            task_data["height"] = int(sqrt(n_cells))
-        task_data["width"] = n_cells // task_data["height"]
+        task_data["height"] = self.info.get("height")
+        task_data["width"] = self.info.get("width")
         if not binairo_plus:
             task_data["table"] = [
                 table[i:i + task_data["width"]]
@@ -353,89 +361,16 @@ class WordsearchTaskParser(TaskParserBase):
         else:
             letters = [c.upper() for c in grid_part if c.isalpha()]
 
-        height = self.info.get("height")
-        width = self.info.get("width")
-        if height is None:
-            height = int(sqrt(len(letters)))
-        if width is None:
-            width = len(letters) // height if height else 0
-        task_data["height"] = height
-        task_data["width"] = width
+        task_data["height"] = self.info.get("height")
+        task_data["width"] = self.info.get("width")
+        height = task_data["height"]
+        width = task_data["width"]
         n = height * width
         letters = letters[:n]
         if len(letters) < n:
             letters.extend([" "] * (n - len(letters)))
         task_data["table"] = [
             [letters[i * width + j] for j in range(width)]
-            for i in range(height)
-        ]
-        return task_data
-
-
-class ShingokiTaskParser(TaskParserBase):
-    """Parse Shingoki task: grid of dots with circle types and optional numbers.
-
-    Expected raw_task format: 'types' or 'types;numbers'
-    - types: comma-separated digits, 0=empty, 1=white circle, 2=black circle.
-    - numbers: comma-separated digits 0-9; 0=no number, 1-9=sum of segment lengths.
-    Grid is (height+1) x (width+1) dots; dimensions inferred from length (square grid).
-    """
-
-    def parse(self, raw_task):
-        task_data = {}
-        if ";" in raw_task:
-            types_part, numbers_part = raw_task.split(";", 1)
-            types_str = types_part.strip()
-            numbers_str = numbers_part.strip()
-        else:
-            types_str = raw_task.strip()
-            numbers_str = ""
-
-        def parse_digit_list(s, default=0):
-            out = []
-            for x in s.split(","):
-                x = x.strip()
-                if not x:
-                    continue
-                if x.isdigit():
-                    out.append(int(x))
-                else:
-                    out.append(default)
-            return out
-
-        types_list = parse_digit_list(types_str, default=0)
-        numbers_list = parse_digit_list(numbers_str, default=0) if numbers_str else [0] * len(types_list)
-        if len(numbers_list) < len(types_list):
-            numbers_list.extend([0] * (len(types_list) - len(numbers_list)))
-        numbers_list = numbers_list[: len(types_list)]
-
-        n = len(types_list)
-        if n == 0:
-            task_data["height"] = 0
-            task_data["width"] = 0
-            task_data["table"] = []
-            task_data["numbers_table"] = []
-            return task_data
-
-        size = int(sqrt(n))
-        if size * size != n:
-            size = max(1, int(sqrt(n)))
-        width = n // size
-        height = size if size * size == n else n // width
-
-        if self.info.get("height") is not None:
-            height = self.info["height"]
-        if self.info.get("width") is not None:
-            width = self.info["width"]
-
-        task_data["height"] = height
-        task_data["width"] = width
-        task_data["table"] = [
-            [types_list[i * width + j] for j in range(width)]
-            for i in range(height)
-        ]
-        task_data["numbers_table"] = [
-            [numbers_list[i * width + j] for j in range(width)]
             for i in range(height)
         ]
         return task_data
@@ -469,11 +404,8 @@ class ThermometersTaskParser(TaskParserBase):
         else:
             border = [int(x) if x.isdigit() else x for x in border_part.split("/")]
 
-        if self.info.get("height") is not None:
-            task_data["height"] = self.info.get("height")
-        else:
-            task_data["height"] = len(border) // 2
-        task_data["width"] = len(border) - task_data["height"]
+        task_data["height"] = self.info.get("height")
+        task_data["width"] = self.info.get("width")
         task_data["vertical_borders"] = border[: task_data["width"]]
         task_data["horizontal_borders"] = border[task_data["width"] :]
 
@@ -500,91 +432,6 @@ class ThermometersTaskParser(TaskParserBase):
                 if path:
                     thermometers.append(path)
         task_data["thermometers"] = thermometers
-        return task_data
-
-
-class KakuroTaskParser(TaskParserBase):
-    """Parse Kakuro task: grid of white/black cells plus down and across clues.
-
-    Expected raw_task format: 'grid;down;across'
-    - grid: same as TableTaskParser (0=white, 1=black; 0 may be stored as 2).
-    - down: comma-separated numbers, one per cell (row-major), 0 = no down clue.
-    - across: comma-separated numbers, one per cell (row-major), 0 = no across clue.
-    """
-
-    def parse(self, raw_task):
-        task_data = {}
-        parts = raw_task.split(";", 2)
-        if len(parts) < 3:
-            raise ValueError("Kakuro task must have three parts: grid;down;across")
-
-        grid_part = parts[0].strip()
-        down_part = parts[1].strip()
-        across_part = parts[2].strip()
-
-        # Parse grid: comma-separated (0/1 or W/B) or dense string
-        table = []
-        if "," in grid_part:
-            for token in grid_part.split(","):
-                token = token.strip()
-                if token in ("W", "0"):
-                    table.append(2)  # white, same as TableTaskParser
-                elif token in ("B", "1"):
-                    table.append(1)
-                elif token.isdigit():
-                    n = int(token)
-                    table.append(2 if n == 0 else n)
-                else:
-                    table.append(2)
-        else:
-            char_idx = 0
-            while char_idx < len(grid_part):
-                char = grid_part[char_idx]
-                if char in ("W", "B"):
-                    table.append(0 if char == "W" else 1)
-                elif char.isdigit():
-                    char_start = char_idx
-                    while char_idx + 1 < len(grid_part) and grid_part[char_idx + 1].isdigit():
-                        char_idx += 1
-                    number = int(grid_part[char_start : char_idx + 1])
-                    table.append(2 if number == 0 else number)
-                elif char == "_":
-                    pass
-                else:
-                    table.extend([0] * (ord(char) - ord("a") + 1))
-                char_idx += 1
-
-        n_cells = len(table)
-        if self.info.get("height") is not None:
-            task_data["height"] = self.info["height"]
-        else:
-            task_data["height"] = int(sqrt(n_cells))
-        task_data["width"] = n_cells // task_data["height"]
-        task_data["table"] = [
-            table[i : i + task_data["width"]]
-            for i in range(0, len(table), task_data["width"])
-        ]
-
-        def parse_number_list(s):
-            out = []
-            for x in s.replace(",", " ").split():
-                out.append(int(x) if x.isdigit() else 0)
-            return out
-
-        down_flat = parse_number_list(down_part)
-        across_flat = parse_number_list(across_part)
-        h, w = task_data["height"], task_data["width"]
-        n = h * w
-        while len(down_flat) < n:
-            down_flat.append(0)
-        while len(across_flat) < n:
-            across_flat.append(0)
-        task_data["down_clues"] = [
-            down_flat[i : i + w] for i in range(0, n, w)
-        ]
-        task_data["across_clues"] = [
-            across_flat[i : i + w] for i in range(0, n, w)
-        ]
         return task_data
 
 

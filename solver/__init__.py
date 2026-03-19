@@ -19,9 +19,11 @@ from . import dominosa_solver
 from . import hitori_solver
 from . import kurodoko_solver
 from . import nurikabe_solver
+from . import stitches_solver
 from . import wordsearch_solver
 from . import boggle_solver
 from . import light_up_solver
+from . import shingoki_solver
 from . import battleships_solver
 from . import hashi_solver
 from . import heyawake_solver
@@ -32,9 +34,12 @@ from . import lits_solver
 from . import thermometers_solver
 from . import galaxies_solver
 from . import slither_link_solver
+from . import kakuro_solver
 from . import minesweeper_solver
+from . import mosaic_solver
 from . import shakashaka_solver
 from . import pipes_solver
+from . import aquarium_solver
 from . import tapa_solver
 from . import yin_yang_solver
 from . import slant_solver

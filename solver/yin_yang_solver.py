@@ -95,7 +95,7 @@ def _has_2x2_same(board, height, width, r, c, color):
 class YinYangSolver(BaseSolver):
     """Solver for Yin Yang puzzles.
 
-    Input: grid from TableTaskParser with binary=True; cells are 'W', 'B', or empty (2).
+    Input: grid from TableTaskParser with single_number=True; cells are 'W', 'B', or empty (2).
     Output: 2D grid with 0=white, 1=black (for TableSubmitter: 0=skip, 1=one click).
     """
 

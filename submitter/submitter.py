@@ -99,9 +99,9 @@ class SubmitterBase:
         self.offset = offset  # Store offset for re-extraction after clear_grid
         self.extract(offset)
 
-    def extract(self, offset=0):
+    def extract(self, offset=0, tags = ".selectable, .task-cell"):
         """Extract all selectable cells from the page."""
-        self.all_cells = self.driver.find_elements(By.CSS_SELECTOR, ".selectable, .task-cell")
+        self.all_cells = self.driver.find_elements(By.CSS_SELECTOR, tags)
     
     def clear_grid(self):
         """Clear the grid by calling Game.resetState() in the page.
@@ -247,6 +247,35 @@ class WallsSubmitter(SubmitterBase):
                 if value == 0:
                     continue  # Skip no-wall cells
                 self.submit_val(cell, value)
+
+
+def get_midpoint_between_elements(driver, element_a, element_b):
+    """Return (x, y) of the midpoint between two elements' centers."""
+    ca = get_element_center(driver, element_a)
+    cb = get_element_center(driver, element_b)
+    x = (ca["x"] + cb["x"]) / 2
+    y = (ca["y"] + cb["y"]) / 2
+    return (x, y)
+
+
+class TableBetweenSubmitter(TableSubmitter):
+    """Submitter that clicks in the middle between two elements per solution entry.
+
+    Solution format: list of (index_a, index_b) pairs. Each pair means: click
+    at the midpoint between the element at index_a and the element at index_b
+    in the extracted cell list (self.all_cells after extract).
+    """
+
+    def submit(self, solution):
+        """Submit by clicking at the midpoint between each pair of elements.
+        solution: list of (index_a, index_b) pairs; indices into self.all_cells.
+        """
+        for index_a, index_b in solution:
+            elem_a = self.cells[index_a[0]][index_a[1]]
+            elem_b = self.cells[index_b[0]][index_b[1]]
+            x, y = get_midpoint_between_elements(self.driver, elem_a, elem_b)
+            perform_js_coordinate_click(self.driver, x, y)
+            human_delay()
 
 
 class HashiSubmitter(SubmitterBase):
