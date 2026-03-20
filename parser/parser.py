@@ -254,14 +254,16 @@ class BorderTaskParser(TaskParserBase):
         task_data = {}
         
         # Consider '.' or '_' as possible splitters (both for joining and for split)
-        if '.' in raw_task or '_' in raw_task:
+        if '.' in raw_task or '_' in raw_task or ',' in raw_task:
             border = raw_task.split('/')
-            # For each border, split by '.' or '_' and parse as int if digit
+            # For each border, split by '.', '_', or ',' and parse as int if digit
             def smart_split(x):
                 if '.' in x:
                     cells = x.split('.')
                 elif '_' in x:
                     cells = x.split('_')
+                elif ',' in x:
+                    cells = x.split(',')
                 else:
                     cells = [x]
                 return [int(y) if y.isdigit() else y for y in cells]
@@ -459,9 +461,9 @@ class CombinedTaskParser(TaskParserBase):
     def parse(self, raw_task):
         raw_tasks = raw_task.split(self.splitter)
         combined_data = {}
-        for task_index in range(len(raw_tasks)):
+        for task_index in range(len(self.parsers)):
             parser = self.parsers[task_index](self.info)
-            data = parser.parse(raw_tasks[task_index])
+            data = parser.parse(raw_tasks[task_index] if task_index != len(self.parsers)-1 else self.splitter.join(raw_tasks[task_index:]))
             for key in data:
                 if key in combined_data:
                     suffix = 2

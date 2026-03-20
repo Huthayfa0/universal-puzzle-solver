@@ -1,9 +1,10 @@
 """Tents puzzle solver.
 
 Rules:
-- Pair each tree with a tent adjacent horizontally or vertically (1-to-1).
-- Tents never touch each other, even diagonally.
-- The clues outside the grid indicate the number of tents on that row/column.
+- Each tree is paired with exactly one tent; the tent is always orthogonally
+  adjacent to that tree (sharing an edge, not diagonal only).
+- Different tents do not touch in any of the eight directions (orthogonal or diagonal).
+- Row/column clues are the tent counts for that line.
 """
 
 from .solver import BaseSolver
@@ -13,6 +14,11 @@ from .solver import BaseSolver
 _D4 = [(0, 1), (1, 0), (0, -1), (-1, 0)]
 # 8 directions (including diagonals) for no-touch constraint
 _D8 = [(0, 1), (1, 0), (0, -1), (-1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+
+
+def _manhattan_1(a, b):
+    """True if cells a and b are orthogonally adjacent (edge-sharing)."""
+    return abs(a[0] - b[0]) + abs(a[1] - b[1]) == 1
 
 
 def _normalize_table(table, height, width):
@@ -32,7 +38,7 @@ class TentsSolver(BaseSolver):
 
     Input: table (trees=1, empty=0/2), horizontal_borders (row tent counts),
            vertical_borders (column tent counts).
-    Output: 2D grid with 0 = no tent, 1 = tent (only on empty cells).
+    Output: 2D grid: 0 = no tent, 1 = tent (TableSubmitter clicks tent cells only).
     """
 
     def __init__(self, info, show_progress=True, partial_solution_callback=None, progress_interval=10.0, partial_interval=100.0):
@@ -66,28 +72,28 @@ class TentsSolver(BaseSolver):
                     cands.append((nr, nc))
             self.tree_candidates.append(cands)
 
-    def _tent_touches_another(self, r, c, exclude=None):
-        """True if (r,c) has any 8-adjacent cell that is a tent (or in used set)."""
-        exclude = exclude or set()
+    def _tent_touches_another(self, r, c):
+        """True if (r,c) has a tent in any of the 8 neighboring cells (king move)."""
         for dr, dc in _D8:
             nr, nc = r + dr, c + dc
-            if 0 <= nr < self.height and 0 <= nc < self.width:
-                if (nr, nc) in exclude:
-                    continue
-                if self.board[nr][nc] == 1:
-                    return True
+            if 0 <= nr < self.height and 0 <= nc < self.width and self.board[nr][nc] == 1:
+                return True
         return False
 
     def _can_place_tent(self, r, c, used_cells):
-        """True if we can place a tent at (r,c): empty cell, not used, no adjacent tent."""
+        """True if we can place a tent at (r,c): empty, unused, no tent in any of 8 directions."""
         if self.grid[r][c] != 0:
             return False
         if (r, c) in used_cells:
             return False
-        return not self._tent_touches_another(r, c, exclude=used_cells)
+        return not self._tent_touches_another(r, c)
 
     def solve(self):
-        """Solve the Tents puzzle. Returns 2D grid with 0=no tent, 1=tent."""
+        """Solve the Tents puzzle.
+
+        Returns:
+            height × width matrix: 0 = empty/no tent, 1 = tent (for TableSubmitter), or None.
+        """
         call_count = [0]
         backtrack_count = [0]
         n_trees = len(self.trees)
@@ -112,6 +118,8 @@ class TentsSolver(BaseSolver):
             cands = self.tree_candidates[tree_idx]
 
             for tr, tc in cands:
+                if not _manhattan_1((r, c), (tr, tc)):
+                    continue
                 if not self._can_place_tent(tr, tc, used_cells):
                     continue
                 if row_remaining[tr] <= 0 or col_remaining[tc] <= 0:

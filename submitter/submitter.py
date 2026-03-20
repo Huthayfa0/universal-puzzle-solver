@@ -262,17 +262,15 @@ def get_midpoint_between_elements(driver, element_a, element_b):
 
 
 class TableBetweenSubmitter(TableSubmitter):
-    """Submitter that clicks in the middle between two elements per solution entry.
+    """Submitter that clicks in the middle between two grid cells per solution entry.
 
-    Solution format: list of (index_a, index_b) pairs. Each pair means: click
-    at the midpoint between the element at index_a and the element at index_b
-    in the extracted cell list (self.all_cells after extract).
+    Solution format: list of ((r1, c1), (r2, c2)) pairs in row–column indices
+    into ``self.cells`` (same layout as ``TableSubmitter``). Clicks the midpoint
+    between the two cell elements. Used for Dominosa, Stitches, etc.
     """
 
     def submit(self, solution):
-        """Submit by clicking at the midpoint between each pair of elements.
-        solution: list of (index_a, index_b) pairs; indices into self.all_cells.
-        """
+        """Submit by clicking at the midpoint between each pair of cells."""
         for index_a, index_b in solution:
             elem_a = self.cells[index_a[0]][index_a[1]]
             elem_b = self.cells[index_b[0]][index_b[1]]

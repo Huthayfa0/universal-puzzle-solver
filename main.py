@@ -238,6 +238,8 @@ def configure_puzzle_info(info):
         info["single_number"] = True
     if puzzle_type == "binairo-plus":
         info["binairo_plus"] = True
+    if puzzle_type == "tents": # single option is used to parse the task for TableTaskParser
+        info["single_option"] = True
 
 
 def create_parser(info):
@@ -412,6 +414,8 @@ def create_submitter(driver, info, offset=0):
         return TableBetweenSubmitter(driver, info, offset=offset)
     if info["puzzle"] == "dominosa":
         return TableBetweenSubmitter(driver, info, offset=offset, tags=".cell")
+    if info["puzzle"] == "tents":
+        return TableSubmitter(driver, info, offset=offset, tags=".tree-cell, .selectable")
     if info["puzzle"] == "slither-link":
         submit_info = {**info, "height": info["height"] + 1, "width": info["width"] + 1}
         return WallsSubmitter(driver, submit_info, offset=offset)
