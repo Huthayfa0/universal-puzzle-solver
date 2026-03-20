@@ -234,7 +234,7 @@ def configure_puzzle_info(info):
         info["double_borders"] = True
 
     # Puzzles where each cell is a single number (one digit per cell); 0/1 stored as W/B by parser
-    if puzzle_type in ("binairo", "binairo-plus", "battleships", "yin-yang"):
+    if puzzle_type in ("binairo", "binairo-plus", "battleships", "yin-yang", "light-up"):
         info["single_number"] = True
     if puzzle_type == "binairo-plus":
         info["binairo_plus"] = True
@@ -423,6 +423,8 @@ def create_submitter(driver, info, offset=0):
         return WallsSubmitter(driver, info, offset=offset)
     if info["puzzle"] == "hashi":
         return HashiSubmitter(driver, info, offset=offset)
+    if info["puzzle"] == "light-up":
+        return TableSubmitter(driver, info, offset=offset, tags=".selectable, .light-up-task-cell")
     return TableSubmitter(driver, info, offset=offset)
 
 

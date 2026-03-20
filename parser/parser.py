@@ -178,14 +178,7 @@ class TableTaskParser(TaskParserBase):
                 while (not single_number and char_idx + 1 < len(raw_task)) and raw_task[char_idx + 1].isdigit():
                     char_idx += 1
                 number = int(raw_task[char_start:char_idx + 1])
-                if single_number:
-                    # Single-number row: 0 → W (white), 1 → B (black)
-                    if number == 0:
-                        table.append('Zero')
-                    else:
-                        table.append(number)  # e.g. 2 for empty
-                else:
-                    table.append('Zero' if number == 0 else number)
+                table.append('Zero' if number == 0 else number)
             elif char == '_':
                 if single_option:
                     table.append(1)
